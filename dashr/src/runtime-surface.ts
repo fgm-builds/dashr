@@ -1,23 +1,21 @@
 /**
- * The `rlmRuntime` seam surface, as this presentation plugin consumes it —
- * a STRUCTURAL MIRROR of the vendored Service Definition in
- * `dashr-code-runtime-ipython` (`src/vendored/rlm-runtime.ts`, itself
- * vendored verbatim from `@deepseek-ai/dsh-code-runtime@0.1.0-rc.6`
- * `src/types.ts`).
+ * The `rlmRuntime` seam surface, as the presentation half of this plugin
+ * consumes it — a STRUCTURAL MIRROR of the vendored Service Definition
+ * (`src/vendored/rlm-runtime.ts`, itself vendored verbatim from
+ * `@deepseek-ai/dsh-code-runtime@0.1.0-rc.6` `src/types.ts`).
  *
- * Why a mirror instead of an import: the Service Definition lives in the
- * sibling package's SOURCES (its `./src/*` exports subpath), and type-only
- * imports across a source subpath poison the published type graph — the dts
- * bundler cannot follow a `.ts` specifier through an exports map, and a
- * consumer's compiler would need `allowImportingTsExtensions` to read our
- * declarations. Structural typing is what the Cordis service boundary is
- * built on (contexts resolve implementations by key, not by class identity),
- * so depending on the shape is the seam-correct dependency.
+ * Why a mirror instead of a direct import, even inside one package: the
+ * presentation programs against a NARROW view of the runtime contract
+ * (bindings, dispatch logs, results) — the same shape a third-party
+ * `ctx.rlmRuntime` implementation would expose. Structural typing is what
+ * the Cordis service boundary is built on (contexts resolve implementations
+ * by key, not by class identity), so depending on the shape — not on our own
+ * `IPythonCodeRuntime` class — keeps the presentation implementation-agnostic.
  *
  * Drift control: `test/compat.spec.ts` statically asserts this surface is
- * exactly compatible with the vendored types — a contract change there fails
- * THIS package's typecheck.
- * @module dashr-tool-presentation/runtime-surface
+ * exactly compatible with the vendored types — a contract change there
+ * fails this package's typecheck.
+ * @module dashr-plugin/runtime-surface
  */
 
 /** One host-side function exposed to the program as an async callable; args and resolution must be lossless JSON. */

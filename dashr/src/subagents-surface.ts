@@ -19,7 +19,7 @@
  * callback therefore lives in THIS presentation layer: it is the one place
  * that can simultaneously reach `ctx.subagents` (outward), the parent
  * `Agent` (`exec.agent`), and the run's abort signal.
- * @module dashr-tool-presentation/subagents-surface
+ * @module dashr-plugin/subagents-surface
  */
 
 import type { Agent } from '@deepseek-ai/dsh-agent'

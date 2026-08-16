@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { setup } from './helpers.ts'
+import { setupRuntime } from './helpers.ts'
 
 const snapshotDirs: string[] = []
 
@@ -26,7 +26,7 @@ function isAlive(pid: number | undefined): boolean {
 
 describe('IPythonCodeRuntime — lifecycle as effects', () => {
   it('disposes the kernel subprocess on fiber dispose (pid goes away)', async () => {
-    const { fiber, runtime } = await setup()
+    const { fiber, runtime } = await setupRuntime()
     const result = await runtime.run({ program: 'x = 40 + 2\nprint(x)', bindings: [] })
     expect(result.logs).toContain('42')
     const pid = runtime.kernelPid
@@ -42,7 +42,7 @@ describe('IPythonCodeRuntime — lifecycle as effects', () => {
   }, 30_000)
 
   it('aborts an in-flight run on dispose and rejects later runs', async () => {
-    const { fiber, runtime } = await setup()
+    const { fiber, runtime } = await setupRuntime()
     await runtime.run({ program: 'print("warm")', bindings: [] })
     const inflight = runtime.run({ program: 'import time\ntime.sleep(30)\nreturn 1', bindings: [] })
     await new Promise(resolve => setTimeout(resolve, 500))
@@ -56,7 +56,7 @@ describe('IPythonCodeRuntime — lifecycle as effects', () => {
   it('writes a namespace snapshot on dispose when snapshotDir is configured', async () => {
     const snapshotDir = mkdtempSync(join(tmpdir(), 'dashr-snapshot-'))
     snapshotDirs.push(snapshotDir)
-    const { fiber, runtime } = await setup({ snapshotDir })
+    const { fiber, runtime } = await setupRuntime({ snapshotDir })
     await runtime.run({ program: 'x = 40 + 2\npayload = {"kept": True}', bindings: [] })
     await fiber.dispose()
 
@@ -78,7 +78,7 @@ describe('IPythonCodeRuntime — lifecycle as effects', () => {
   }, 30_000)
 
   it('times out a runaway cell and keeps the kernel usable', async () => {
-    const { fiber, runtime } = await setup({ runTimeoutMs: 3_000, interruptGraceMs: 2_000 })
+    const { fiber, runtime } = await setupRuntime({ runTimeoutMs: 3_000, interruptGraceMs: 2_000 })
     const hot = await runtime.run({ program: 'while True:\n    pass', bindings: [] })
     expect(hot.error?.kind).toBe('timeout')
     // The interrupt freed the kernel: a later run still works.

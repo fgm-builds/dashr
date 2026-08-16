@@ -10,7 +10,7 @@
  * and its answer is parsed under a strict all-or-nothing op schema: anything
  * unparseable leaves the store untouched and surfaces as a structured cell
  * error, never a half-applied prompt mutation.
- * @module dashr-tool-presentation/refine
+ * @module dashr-plugin/refine
  */
 
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -92,7 +92,7 @@ export function buildRefineMessages(entries: readonly HarnessEntry[], instructio
       type: 'text',
       text: `Current harness entries:\n${dump}\n\nInstruction:\n${instruction}`,
     }],
-    source: { kind: 'plugin', plugin: 'dashr-tool-presentation' },
+    source: { kind: 'plugin', plugin: 'dashr-plugin' },
   })]
 }
 

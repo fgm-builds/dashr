@@ -7,7 +7,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
-import { FakeCellRuntime, fakeRuntime, runCell, setup } from './helpers.ts'
+import { FakeCellRuntime, fakeRuntime, runCell, setupPresentation } from './helpers.ts'
 import {
   HarnessStore,
   HARNESS_SECTION_ORDER,
@@ -57,7 +57,7 @@ async function harnessSectionText(ctx: Context, agent: Agent): Promise<string> {
 
 describe('Continual Harness store + section', () => {
   it('renders entries at every assembly and drops the section text when empty', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     expect(await harnessSectionText(ctx, agent.agent)).toBe('')
 
     const store = new HarnessStore()
@@ -71,7 +71,7 @@ describe('Continual Harness store + section', () => {
   })
 
   it('sits after the tool-guidance band and neutralizes literal {{ against the prompt-variable machinery', async () => {
-    const { ctx, agent } = await setup(fakeRuntime, { refineModel: 'zai/glm-5.2' })
+    const { ctx, agent } = await setupPresentation(fakeRuntime, { refineModel: 'zai/glm-5.2' })
     await registerStubLlm(ctx, { text: '[{"op":"add","kind":"note","title":"Templates","content":"Use {{var}} syntax in prompts."}]' })
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
     runtime.behavior = async (request) => {
@@ -96,7 +96,7 @@ describe('Continual Harness store + section', () => {
 
 describe('refine() binding', () => {
   it('applies validated ops, reports the summary, and the NEXT assembly carries the new entry', async () => {
-    const { ctx, agent } = await setup(fakeRuntime, { refineModel: 'zai/glm-5.2' })
+    const { ctx, agent } = await setupPresentation(fakeRuntime, { refineModel: 'zai/glm-5.2' })
     const { captured } = await registerStubLlm(ctx, { text: JSON.stringify([
       { op: 'add', kind: 'memory', title: 'Deployment fact', content: 'dev3 runs Ubuntu 26.04.' },
       { op: 'add', kind: 'note', title: 'Tone', content: 'Keep answers terse.' },
@@ -134,7 +134,7 @@ describe('refine() binding', () => {
   })
 
   it('leaves the store untouched and answers a structured error on unparseable or invalid ops', async () => {
-    const { ctx, agent } = await setup(fakeRuntime, { refineModel: 'zai/glm-5.2' })
+    const { ctx, agent } = await setupPresentation(fakeRuntime, { refineModel: 'zai/glm-5.2' })
     const respond = { text: 'I would rather not emit JSON today, sorry.' }
     const { captured } = await registerStubLlm(ctx, respond)
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
@@ -159,7 +159,7 @@ describe('refine() binding', () => {
   })
 
   it('resolves the model route: the agent route when unset, with a structured error when no route exists', async () => {
-    const { ctx, agent } = await setup(fakeRuntime, {}, { provider: 'deepseek', model: 'dsv3' })
+    const { ctx, agent } = await setupPresentation(fakeRuntime, {}, { provider: 'deepseek', model: 'dsv3' })
     const { captured } = await registerStubLlm(ctx, { text: '[]' })
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
     runtime.behavior = async (request) => {
@@ -171,7 +171,7 @@ describe('refine() binding', () => {
     expect(captured.at(-1)).toMatchObject({ provider: 'deepseek', model: 'dsv3' })
 
     // No route anywhere: structured error, no llm call.
-    const bare = await setup(fakeRuntime)
+    const bare = await setupPresentation(fakeRuntime)
     await registerStubLlm(bare.ctx, { text: '[]' })
     const bareRuntime = bare.ctx.get('rlmRuntime') as FakeCellRuntime
     let llmCalls = 0
@@ -190,7 +190,7 @@ describe('refine() binding', () => {
   })
 
   it('pairs a bare refineModel with the agent provider, and forwards exec.signal into the model call', async () => {
-    const { ctx, agent } = await setup(fakeRuntime, { refineModel: 'glm-5.2' }, { provider: 'zai', model: 'parent-model' })
+    const { ctx, agent } = await setupPresentation(fakeRuntime, { refineModel: 'glm-5.2' }, { provider: 'zai', model: 'parent-model' })
     const controller = new AbortController()
     const captured: GenerateOptions[] = []
     const fiber = await ctx.plugin({ name: 'stub-llm-abort', apply(c) {
@@ -241,7 +241,7 @@ describe('refine() binding', () => {
   })
 
   it('validates the binding signature and requires an agent + llm service', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
     runtime.behavior = async (request) => {
       const refine = request.bindings.find(binding => binding.global === 'refine')!
@@ -271,7 +271,7 @@ describe('harness persistence', () => {
     const dir = mkdtempSync(join(tmpdir(), 'dashr-harness-'))
     onTestFinished(() => { rmSync(dir, { recursive: true, force: true }) })
 
-    const first = await setup(fakeRuntime, { harnessDir: dir }, { provider: 'zai', model: 'glm-5.2' })
+    const first = await setupPresentation(fakeRuntime, { harnessDir: dir }, { provider: 'zai', model: 'glm-5.2' })
     await registerStubLlm(first.ctx, { text: '[{"op":"add","kind":"skill","title":"Rebuild","content":"npm run build in both packages."}]' })
     const runtimeOne = first.ctx.get('rlmRuntime') as FakeCellRuntime
     runtimeOne.behavior = async (request) => {
@@ -284,14 +284,14 @@ describe('harness persistence', () => {
     // A completely fresh composition (new Context, new store) over the same
     // directory: the same agent id ('dashr-agent' in both setups) restores
     // its entries on first touch.
-    const second = await setup(fakeRuntime, { harnessDir: dir })
+    const second = await setupPresentation(fakeRuntime, { harnessDir: dir })
     const text = await harnessSectionText(second.ctx, second.agent.agent)
     expect(text).toContain('[skill-1] skill — Rebuild')
     expect(text).toContain('npm run build in both packages.')
   })
 
   it('is memory-only without harnessDir: a fresh composition starts empty', async () => {
-    const first = await setup(fakeRuntime, {}, { provider: 'zai', model: 'glm-5.2' })
+    const first = await setupPresentation(fakeRuntime, {}, { provider: 'zai', model: 'glm-5.2' })
     await registerStubLlm(first.ctx, { text: '[{"op":"add","kind":"note","title":"N","content":"C"}]' })
     const runtimeOne = first.ctx.get('rlmRuntime') as FakeCellRuntime
     runtimeOne.behavior = async (request) => {
@@ -300,7 +300,7 @@ describe('harness persistence', () => {
       return { logs: [], value: null }
     }
     await cell(first.ctx, first.agent.agent, 'program')
-    const second = await setup(fakeRuntime)
+    const second = await setupPresentation(fakeRuntime)
     expect(await harnessSectionText(second.ctx, second.agent.agent)).toBe('')
   })
 })
@@ -316,8 +316,8 @@ describe('config boundary (empty strings are typos, not unset)', () => {
   })
 
   it('fails the preset mount loudly on an empty key', async () => {
-    await expect(setup(fakeRuntime, { refineModel: '' })).rejects.toThrow('refineModel must be a non-empty string')
-    await expect(setup(fakeRuntime, { compactModel: '' })).rejects.toThrow('compactModel must be a non-empty string')
-    await expect(setup(fakeRuntime, { harnessDir: '' })).rejects.toThrow('harnessDir must be a non-empty string')
+    await expect(setupPresentation(fakeRuntime, { refineModel: '' })).rejects.toThrow('refineModel must be a non-empty string')
+    await expect(setupPresentation(fakeRuntime, { compactModel: '' })).rejects.toThrow('compactModel must be a non-empty string')
+    await expect(setupPresentation(fakeRuntime, { harnessDir: '' })).rejects.toThrow('harnessDir must be a non-empty string')
   })
 })

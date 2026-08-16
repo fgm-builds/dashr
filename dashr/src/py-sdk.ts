@@ -22,7 +22,7 @@
  *   escapes, bracket-nesting cap) exist because the emitted block is the
  *   model's ONLY declaration of the tools, and a syntax error in it poisons
  *   the whole mode.
- * @module dashr-tool-presentation/py-sdk
+ * @module dashr-plugin/py-sdk
  */
 
 import { assertSupportedJsonSchema } from '@deepseek-ai/dsh-tools'
@@ -303,7 +303,7 @@ function renderType(schema: unknown, className: string, state: RenderState): str
       if (frame.phase === 'children') {
         if (frame.childIndex < frame.children.length) {
           const child = frame.children[frame.childIndex]
-          if (child === undefined) throw new Error('dashr-tool-presentation: missing python render child')
+          if (child === undefined) throw new Error('dashr-plugin: missing python render child')
           frame.childIndex++
           frames.push(newFrame(child.schema, child.className, child.listDepth))
           continue
@@ -322,13 +322,13 @@ function renderType(schema: unknown, className: string, state: RenderState): str
         }
         const node = frame.node
         const name = frame.allocated
-        if (node === undefined || name === undefined) throw new Error('dashr-tool-presentation: missing typeddict frame state')
+        if (node === undefined || name === undefined) throw new Error('dashr-plugin: missing typeddict frame state')
         const required = new Set(node.required)
         const lines = [`class ${name}(TypedDict):`]
         for (let index = 0; index < frame.entries.length; index++) {
           const entry = frame.entries[index]
           const fieldType = frame.childTypes[index]
-          if (entry === undefined || fieldType === undefined) throw new Error('dashr-tool-presentation: missing typeddict field type')
+          if (entry === undefined || fieldType === undefined) throw new Error('dashr-plugin: missing typeddict field type')
           const [field, fieldSchema] = entry
           const description = describe(fieldSchema)
           if (description !== undefined) lines.push(`${pad(1)}# ${description}`)

@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { setup } from './helpers.ts'
+import { setupRuntime } from './helpers.ts'
 
 /**
  * M3-B namespace persistence (blueprint §8): turn-end size-capped snapshots,
@@ -45,7 +45,7 @@ describe('IPythonCodeRuntime — snapshot, restore, revive', () => {
     const snapshotDir = mkdtempSync(join(tmpdir(), 'dashr-snapshot-'))
     snapshotDirs.push(snapshotDir)
 
-    const first = await setup({ snapshotDir })
+    const first = await setupRuntime({ snapshotDir })
     await first.runtime.run({ program: 'kept = 40 + 1', bindings: [], principal: 'sess-resume' })
     await first.fiber.dispose()
     const manifestPath = join(snapshotDir, 'sess-resume', 'manifest.json')
@@ -58,7 +58,7 @@ describe('IPythonCodeRuntime — snapshot, restore, revive', () => {
     expect(manifest.skipped).toBe(false)
 
     // A NEW provider (a resumed session) restores before running user code.
-    const second = await setup({ snapshotDir })
+    const second = await setupRuntime({ snapshotDir })
     const resumed = await second.runtime.run({ program: 'print(kept)', bindings: [], principal: 'sess-resume' })
     expect(resumed.error).toBeUndefined()
     expect(resumed.logs).toContain('41')
@@ -70,7 +70,7 @@ describe('IPythonCodeRuntime — snapshot, restore, revive', () => {
     const snapshotDir = mkdtempSync(join(tmpdir(), 'dashr-snapshot-'))
     snapshotDirs.push(snapshotDir)
 
-    const first = await setup({ snapshotDir })
+    const first = await setupRuntime({ snapshotDir })
     await first.runtime.run({ program: 'doomed = "state"', bindings: [], principal: 'sess-mismatch' })
     await first.fiber.dispose()
 
@@ -80,7 +80,7 @@ describe('IPythonCodeRuntime — snapshot, restore, revive', () => {
     manifest['pythonVersion'] = '0.0.0'
     writeFileSync(manifestPath, JSON.stringify(manifest))
 
-    const second = await setup({ snapshotDir })
+    const second = await setupRuntime({ snapshotDir })
     const degraded = await second.runtime.run({ program: 'print("doomed" in globals())', bindings: [], principal: 'sess-mismatch' })
     expect(degraded.error).toBeUndefined()
     expect(degraded.logs).toContain('False')
@@ -92,7 +92,7 @@ describe('IPythonCodeRuntime — snapshot, restore, revive', () => {
   it('revives a dead kernel onto its nearest snapshot and names the lost rounds', async () => {
     const snapshotDir = mkdtempSync(join(tmpdir(), 'dashr-snapshot-'))
     snapshotDirs.push(snapshotDir)
-    const { runtime } = await setup({ snapshotDir })
+    const { runtime } = await setupRuntime({ snapshotDir })
     await runtime.run({ program: 'a = 1', bindings: [], principal: 'sess-revive' })
     await runtime.run({ program: 'b = 2', bindings: [], principal: 'sess-revive' })
     const deadPid = runtime.kernelPids[0] as number
@@ -118,7 +118,7 @@ describe('IPythonCodeRuntime — snapshot, restore, revive', () => {
   it('skips an over-cap turn-end snapshot and warns the model exactly once', async () => {
     const snapshotDir = mkdtempSync(join(tmpdir(), 'dashr-snapshot-'))
     snapshotDirs.push(snapshotDir)
-    const { runtime } = await setup({ snapshotDir, snapshotSizeCapBytes: 10_000 })
+    const { runtime } = await setupRuntime({ snapshotDir, snapshotSizeCapBytes: 10_000 })
 
     // ~50KB of string is estimated over the 10KB cap before any dill IO.
     const first = await runtime.run({ program: 'big = "x" * 50000', bindings: [] })

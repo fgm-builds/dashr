@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { IPythonCodeRuntime } from '../src/index.ts'
-import { KERNEL_PYTHON, setup } from './helpers.ts'
+import { KERNEL_PYTHON, setupRuntime } from './helpers.ts'
 
 /**
  * M3-A session keying (blueprint §6 "kernel per-session 键控"): one service
@@ -47,7 +47,7 @@ afterEach(() => {
 
 describe('IPythonCodeRuntime — per-session kernel keying', () => {
   it('isolates namespaces between principals on one shared service instance', async () => {
-    const { runtime } = await setup()
+    const { runtime } = await setupRuntime()
     await runtime.run({ program: 'secret_a = "only-a"', bindings: [], principal: 'sess-a' })
 
     // Session B's kernel has its own namespace: reading A's variable is a
@@ -66,7 +66,7 @@ describe('IPythonCodeRuntime — per-session kernel keying', () => {
   }, 30_000)
 
   it('shares state between runs of the same principal', async () => {
-    const { runtime } = await setup()
+    const { runtime } = await setupRuntime()
     await runtime.run({ program: 'shared = 40', bindings: [], principal: 'sess-a' })
     const result = await runtime.run({ program: 'print(shared + 2)', bindings: [], principal: 'sess-a' })
     expect(result.error).toBeUndefined()
@@ -75,7 +75,7 @@ describe('IPythonCodeRuntime — per-session kernel keying', () => {
   }, 30_000)
 
   it('keeps the M1 agentless default: runs without a principal share one kernel', async () => {
-    const { runtime } = await setup()
+    const { runtime } = await setupRuntime()
     await runtime.run({ program: 'legacy = "kept"', bindings: [] })
     // An explicit empty principal normalizes onto the same default key.
     const result = await runtime.run({ program: 'print(legacy)', bindings: [], principal: '' })
@@ -85,7 +85,7 @@ describe('IPythonCodeRuntime — per-session kernel keying', () => {
   }, 30_000)
 
   it('spawns nothing for a principal until its first run (lazy per key)', async () => {
-    const { runtime } = await setup()
+    const { runtime } = await setupRuntime()
     await runtime.run({ program: 'x = 1', bindings: [], principal: 'sess-warm' })
     // Only the principal that ran holds a subprocess — the subagent fan-out
     // guarantee: composed-but-silent sessions cost nothing.
@@ -93,7 +93,7 @@ describe('IPythonCodeRuntime — per-session kernel keying', () => {
   }, 30_000)
 
   it('runs different principals concurrently on their own kernels', async () => {
-    const { runtime } = await setup()
+    const { runtime } = await setupRuntime()
     // Warm both kernels first so the measured window is pure execution.
     await runtime.run({ program: 'pass', bindings: [], principal: 'conc-a' })
     await runtime.run({ program: 'pass', bindings: [], principal: 'conc-b' })
@@ -141,7 +141,7 @@ describe('IPythonCodeRuntime — per-session kernel keying', () => {
   }, 30_000)
 
   it('respawns a SIGKILLed kernel fresh on the next run, with an explicit namespace-lost error first', async () => {
-    const { runtime } = await setup()
+    const { runtime } = await setupRuntime()
     await runtime.run({ program: 'lost = "state"', bindings: [], principal: 'sess-dead' })
     const deadPid = runtime.kernelPids[0] as number
     expect(isAlive(deadPid)).toBe(true)
@@ -164,7 +164,7 @@ describe('IPythonCodeRuntime — per-session kernel keying', () => {
   it('snapshots each principal into its own subdirectory on dispose', async () => {
     const snapshotDir = mkdtempSync(join(tmpdir(), 'dashr-snapshot-'))
     snapshotDirs.push(snapshotDir)
-    const { fiber, runtime } = await setup({ snapshotDir })
+    const { fiber, runtime } = await setupRuntime({ snapshotDir })
     await runtime.run({ program: 'x = "a"', bindings: [], principal: 'sess-snap-a' })
     await runtime.run({ program: 'y = "b"', bindings: [], principal: 'sess-snap-b' })
     // Dispose deterministically (the onTestFinished disposer is idempotent)

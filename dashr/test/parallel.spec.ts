@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { setup } from './helpers.ts'
+import { setupRuntime } from './helpers.ts'
 
 /**
  * Concurrent-run discipline (blueprint §6 M1 补遗, delivered in M2): the
@@ -18,7 +18,7 @@ function asTuple(value: unknown): unknown[] {
 
 describe('IPythonCodeRuntime — concurrent runs on one kernel', () => {
   it('serializes two concurrent runs and attributes each result to its own cell', async () => {
-    const { runtime } = await setup()
+    const { runtime } = await setupRuntime()
     // Warm the kernel first so both timed cells enter executeCell with the
     // process already up: the assertion below isolates queue serialization
     // from kernel-boot latency.
@@ -74,7 +74,7 @@ describe('IPythonCodeRuntime — concurrent runs on one kernel', () => {
   })
 
   it('keeps per-run logs separate when both concurrent cells print', async () => {
-    const { runtime } = await setup()
+    const { runtime } = await setupRuntime()
     const boot = await runtime.run({ program: 'pass', bindings: [] })
     expect(boot.error).toBeUndefined()
 

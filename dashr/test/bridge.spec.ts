@@ -5,7 +5,7 @@ import type { PostToolDecision } from '@deepseek-ai/dsh-tools'
 import { CallId, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ToolExecutionToken } from '@deepseek-ai/dsh-tools'
 import { createRunCellTool } from '../src/index.ts'
-import { FakeCellRuntime, fakeRuntime, runCell, setup } from './helpers.ts'
+import { FakeCellRuntime, fakeRuntime, runCell, setupPresentation } from './helpers.ts'
 
 /**
  * The `run_cell` dispatch bridge against an in-repo fake `rlmRuntime` — the
@@ -69,7 +69,7 @@ function registerGated(ctx: Context, name: string, concurrencySafe: boolean) {
 
 describe('the sub-dispatch scheduler (native concurrency contract)', () => {
   it('overlaps concurrency-safe calls under Promise.all and logs a start event per dispatch', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     const gated = registerGated(ctx, 'safe_read', true)
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
     runtime.behavior = async (request) => {
@@ -95,7 +95,7 @@ describe('the sub-dispatch scheduler (native concurrency contract)', () => {
   })
 
   it('an exclusive call bars overlap: safe calls drain first, it runs alone, later calls wait', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     const safe = registerGated(ctx, 'safe_read', true)
     const unsafe = registerGated(ctx, 'writer', false)
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
@@ -123,7 +123,7 @@ describe('the sub-dispatch scheduler (native concurrency contract)', () => {
   })
 
   it('maxParallelSubCalls caps the overlap window', async () => {
-    const { ctx, agent } = await setup(fakeRuntime, { maxParallelSubCalls: 2 })
+    const { ctx, agent } = await setupPresentation(fakeRuntime, { maxParallelSubCalls: 2 })
     const gated = registerGated(ctx, 'safe_read', true)
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
     runtime.behavior = async (request) => {
@@ -147,7 +147,7 @@ describe('the sub-dispatch scheduler (native concurrency contract)', () => {
   })
 
   it('serializes non-concurrency-safe Promise.all dispatches in submission order', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     const intervals: [string, string][] = []
     let active = 0
     ctx.tools.register(defineTool({
@@ -184,7 +184,7 @@ describe('the sub-dispatch scheduler (native concurrency contract)', () => {
   })
 
   it('a queued-unstarted call abandoned by run settlement logs no start event', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     const gated = registerGated(ctx, 'writer', false)
     const abandoned: string[] = []
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
@@ -207,7 +207,7 @@ describe('the sub-dispatch scheduler (native concurrency contract)', () => {
   })
 
   it('an outer abort mid-run aborts in-flight sub-dispatches and still settles their events', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     const gated = registerGated(ctx, 'safe_read', true)
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
     const outer = new AbortController()
@@ -239,7 +239,7 @@ describe('the sub-dispatch scheduler (native concurrency contract)', () => {
 
 describe('the run_cell dispatch bridge (result shaping)', () => {
   it('bridges tool calls, returns only the curated output, and logs events with upstream payload shapes', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     const calls = registerEcho(ctx)
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
     runtime.behavior = async (request) => {
@@ -269,7 +269,7 @@ describe('the run_cell dispatch bridge (result shaping)', () => {
   })
 
   it('rejects the program-side call when the tool errors, with the tool error text', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     ctx.tools.register(defineTool({
       name: 'fail',
       description: 'Always fails.',
@@ -297,7 +297,7 @@ describe('the run_cell dispatch bridge (result shaping)', () => {
   })
 
   it('rejects a binding argument that is not lossless JSON, dispatching nothing', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     const calls = registerEcho(ctx)
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
     runtime.behavior = async (request) => {
@@ -315,7 +315,7 @@ describe('the run_cell dispatch bridge (result shaping)', () => {
   })
 
   it('a failed run surfaces as CODE_RUN_FAILED with the failure kind and captured logs', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
     runtime.behavior = async () => ({ logs: ['partial output'], error: { kind: 'exception', message: 'boom' } })
     const result = await runCell(ctx, 'program', { agent: agent.agent })
@@ -327,7 +327,7 @@ describe('the run_cell dispatch bridge (result shaping)', () => {
   })
 
   it('forwards a nested terminal conclusion onto the successful run_cell result', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     ctx.tools.register(defineTool({
       name: 'finalize',
       description: 'Terminal tool.',
@@ -352,7 +352,7 @@ describe('the run_cell dispatch bridge (result shaping)', () => {
   })
 
   it('defers sub-call additionalContexts onto the outer run_cell result', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     registerEcho(ctx)
     ctx.on('tools/post-execute', (exec, _result, next): Promise<PostToolDecision> => {
       if (exec.name === 'echo') {
@@ -379,7 +379,7 @@ describe('the run_cell dispatch bridge (result shaping)', () => {
   })
 
   it('a throwing tools/code-dispatch-log listener is contained: the original settled content is logged', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     registerEcho(ctx)
     ctx.on('tools/code-dispatch-log', () => { throw new Error('log-content listener failed') })
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
@@ -394,7 +394,7 @@ describe('the run_cell dispatch bridge (result shaping)', () => {
   })
 
   it('a tools/code-dispatch-log listener may replace the durable copy without touching the program value', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     registerEcho(ctx)
     ctx.on('tools/code-dispatch-log', (dispatch, next) => {
       if (dispatch.name !== 'echo') return next()
@@ -415,7 +415,7 @@ describe('the run_cell dispatch bridge (result shaping)', () => {
   })
 
   it('passes the run-scoped abort signal into runtime.run and forwards binding coverage of the calling agent', async () => {
-    const { ctx, agent, other } = await setup(fakeRuntime)
+    const { ctx, agent, other } = await setupPresentation(fakeRuntime)
     registerEcho(ctx)
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
     runtime.behavior = async (request) => {
@@ -433,7 +433,7 @@ describe('the run_cell dispatch bridge (result shaping)', () => {
   })
 
   it('threads the calling agent\'s session id into runtime.run as the principal (M3-A kernel keying)', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
     const result = await runCell(ctx, 'program', { agent: agent.agent })
     expect(result.isError).toBe(false)
@@ -447,7 +447,7 @@ describe('the run_cell dispatch bridge (result shaping)', () => {
     // execute resolves no scoped registration — documented scope semantics),
     // so the agentless branch is pinned by driving the tool definition
     // directly, the way a composite consumer would.
-    const { ctx } = await setup(fakeRuntime)
+    const { ctx } = await setupPresentation(fakeRuntime)
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
     const tool = createRunCellTool(ctx.tools, {
       requireRuntime: () => runtime,

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # DASHR one-click installer.
 #
-# Installs (or reuses) the DeepSeek Harness (dsh), installs the two DASHR
-# plugin packages into a dsh profile, localizes the `dashr` agent preset
-# (include path + kernel Python baked in), and makes sure the kernel Python
-# environment has `ipykernel`.
+# Installs (or reuses) the DeepSeek Harness (dsh), installs the single
+# DASHR plugin package (`dashr-plugin`) into a dsh profile, localizes the
+# `dashr` agent preset (include path + kernel Python baked in), and makes
+# sure the kernel Python environment has `ipykernel`.
 #
 # Env knobs:
 #   DSH_PROFILE     dsh profile to install into            (default: web)
@@ -83,13 +83,11 @@ fi
 if [ -n "$DASHR_SRC" ]; then
   SRC="$DASHR_SRC"
   info "using local source: $SRC (skipping fetch)"
-  for pkg in dashr dashr-presentation; do
-    if [ ! -d "$SRC/$pkg/lib" ]; then
-      info "building $pkg (lib/ missing)"
-      (cd "$SRC/$pkg" && npm install --no-audit --no-fund >/dev/null && npm run build >/dev/null)
-    fi
-    (cd "$SRC/$pkg" && npm pack --pack-destination "$TMP_ROOT" >/dev/null)
-  done
+  if [ ! -d "$SRC/dashr/lib" ]; then
+    info "building dashr-plugin (lib/ missing)"
+    (cd "$SRC/dashr" && npm install --no-audit --no-fund >/dev/null && npm run build >/dev/null)
+  fi
+  (cd "$SRC/dashr" && npm pack --pack-destination "$TMP_ROOT" >/dev/null)
 else
   step "4/5 fetching dashr $DASHR_VERSION"
   ARCHIVE="$TMP_ROOT/dashr-src.tar.gz"
@@ -104,11 +102,9 @@ else
   mkdir -p "$TMP_ROOT/src"
   tar -xzf "$ARCHIVE" -C "$TMP_ROOT/src" --strip-components=1
   SRC="$TMP_ROOT/src"
-  for pkg in dashr dashr-presentation; do
-    info "building $pkg"
-    (cd "$SRC/$pkg" && npm install --no-audit --no-fund >/dev/null && npm run build >/dev/null)
-    (cd "$SRC/$pkg" && npm pack --pack-destination "$TMP_ROOT" >/dev/null)
-  done
+  info "building dashr-plugin"
+  (cd "$SRC/dashr" && npm install --no-audit --no-fund >/dev/null && npm run build >/dev/null)
+  (cd "$SRC/dashr" && npm pack --pack-destination "$TMP_ROOT" >/dev/null)
 fi
 
 # ---------------------------------------------------- 5. plugin + preset
@@ -117,8 +113,7 @@ step "5/5 installing plugins into profile '$DSH_PROFILE' and localizing the pres
 # @deepseek-ai/* peers through the harness install; letting pnpm auto-install
 # them would add a second (divergent) copy of cordis and friends.
 dsh plugin --profile "$DSH_PROFILE" add --config.auto-install-peers=false \
-  "$TMP_ROOT/dashr-code-runtime-ipython-"*.tgz \
-  "$TMP_ROOT/dashr-tool-presentation-"*.tgz
+  "$TMP_ROOT/dashr-plugin-"*.tgz
 
 PRESET_DIR="$DSH_HOME_DIR/.agent-presets/dashr"
 mkdir -p "$PRESET_DIR"
@@ -126,8 +121,8 @@ mkdir -p "$PRESET_DIR"
 # entry, so it cannot use an env expression) and the resolved kernel Python.
 sed -e "s|DASHR_PLACEHOLDER_standard_preset_path_install_script_required|$STD_PRESET|" \
     -e "s|python: !!js process.env.DASHR_KERNEL_PYTHON ?? 'python3'|python: $KERNEL_PY|" \
-    "$SRC/dashr-presentation/preset/dashr/agent.cordis.yml" > "$PRESET_DIR/agent.cordis.yml"
-cp "$SRC/dashr-presentation/preset/dashr/preset.yml" "$PRESET_DIR/preset.yml"
+    "$SRC/dashr/preset/dashr/agent.cordis.yml" > "$PRESET_DIR/agent.cordis.yml"
+cp "$SRC/dashr/preset/dashr/preset.yml" "$PRESET_DIR/preset.yml"
 info "preset localized at $PRESET_DIR"
 
 # ------------------------------------------------------------- restart note

@@ -3,7 +3,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { CallId } from '@deepseek-ai/dsh-llm'
-import { FakeCellRuntime, fakeRuntime, runCell, setup, setupKernel } from './helpers.ts'
+import { FakeCellRuntime, fakeRuntime, runCell, setupPresentation, setupKernel } from './helpers.ts'
 import type { RlmJsonValue } from '../src/runtime-surface.ts'
 
 /**
@@ -61,7 +61,7 @@ async function cell(ctx: Context, agent: Agent, code: string): Promise<{ value: 
 
 describe('rlm() / rlm_await() binding', () => {
   it('admits a child non-blocking and awaits its result through the shared registry', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     await registerStubSubagents(ctx, immediateProvider('run-1').start)
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
 
@@ -84,7 +84,7 @@ describe('rlm() / rlm_await() binding', () => {
   })
 
   it('returns a structured error (never a host crash) when no ctx.subagents is mounted', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
 
     runtime.behavior = async (request) => {
@@ -98,7 +98,7 @@ describe('rlm() / rlm_await() binding', () => {
   })
 
   it('maps a provider start rejection onto the result error field', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     await registerStubSubagents(ctx, async () => {
       throw new Error('no provider named spawn')
     })
@@ -115,7 +115,7 @@ describe('rlm() / rlm_await() binding', () => {
   })
 
   it('validates the bare-callable signature host-side (label is keyword-only)', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     await registerStubSubagents(ctx, immediateProvider('never').start)
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
 
@@ -134,7 +134,7 @@ describe('rlm() / rlm_await() binding', () => {
   })
 
   it('threads the parent agent and the run signal into the subagents start call', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     const seen: { parent: Agent | undefined, signal: AbortSignal | undefined, prompt: string }[] = []
     await registerStubSubagents(ctx, async (_name, request) => {
       seen.push({ parent: request.parent, signal: request.signal, prompt: request.prompt[0]!.type === 'text' ? request.prompt[0]!.text : '' })
@@ -161,7 +161,7 @@ describe('rlm() / rlm_await() binding', () => {
   })
 
   it('disposes live runs owned by a session on agent/disposed', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     const disposed: string[] = []
     await registerStubSubagents(ctx, async () => ({
       id: 'stub-dispose',
@@ -205,7 +205,7 @@ describe('rlm() child-model selection (M4-A three-level priority)', () => {
     // what the bridge actually sent, before any recording layer could
     // re-add an `agentOptions: undefined` key of its own.
     const rawStarts: { label?: unknown, agentOptions?: { model?: string } }[] = []
-    const { ctx, agent } = await setup(fakeRuntime, config)
+    const { ctx, agent } = await setupPresentation(fakeRuntime, config)
     await registerStubSubagents(ctx, async (_name, request) => {
       rawStarts.push(request)
       return {
@@ -261,7 +261,7 @@ describe('rlm() child-model selection (M4-A three-level priority)', () => {
 
   it('rejects non-string model values as a result error without starting a child', async () => {
     let started = 0
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     await registerStubSubagents(ctx, async () => {
       started++
       return {
@@ -293,7 +293,7 @@ describe('rlm() child-model selection (M4-A three-level priority)', () => {
   })
 
   it('rejects an empty-string subagentModel at the config boundary (plugin mount fails loudly)', async () => {
-    await expect(setup(fakeRuntime, { subagentModel: '' })).rejects.toThrow('subagentModel must be a non-empty string')
+    await expect(setupPresentation(fakeRuntime, { subagentModel: '' })).rejects.toThrow('subagentModel must be a non-empty string')
   })
 })
 

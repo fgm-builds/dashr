@@ -8,7 +8,7 @@ import type {
   CodeRunRequest,
   CodeRunResult,
   RLMRuntime,
-} from 'dashr-code-runtime-ipython'
+} from '../src/runtime.ts'
 import type {
   RlmBindingErrorClass,
   RlmBindingFunction,

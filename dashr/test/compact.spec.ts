@@ -3,7 +3,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { BasicCompactionEngine } from '@deepseek-ai/dsh-compaction-basic'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
-import { FakeCellRuntime, fakeRuntime, runCell, setup } from './helpers.ts'
+import { FakeCellRuntime, fakeRuntime, runCell, setupPresentation } from './helpers.ts'
 import type { DASHRCompactionResult, DASHRCompactionSurface } from '../src/index.ts'
 
 /**
@@ -64,7 +64,7 @@ async function cell(ctx: Context, agent: Agent, code: string): Promise<unknown> 
 
 describe('compact() binding', () => {
   it('routes an idle agent through compactNow and reports the compaction result', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     const signal = new AbortController().signal
     const { nowCalls } = await registerStubCompaction(ctx, {
       compactNow: async () => fakeResult(),
@@ -92,7 +92,7 @@ describe('compact() binding', () => {
   })
 
   it('falls through busy compactNow to compactIfNeeded(pressure) — the in-cell path', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     const { nowCalls, pressureCalls } = await registerStubCompaction(ctx, {
       compactNow: () => { throw busyError() },
       compactIfNeeded: async () => fakeResult({ shadowedTokenCount: 900 }),
@@ -112,7 +112,7 @@ describe('compact() binding', () => {
   })
 
   it('reports an honest no-op when the engine finds nothing worth compacting', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     await registerStubCompaction(ctx, {
       compactNow: () => { throw busyError() },
       compactIfNeeded: async () => null,
@@ -126,7 +126,7 @@ describe('compact() binding', () => {
   })
 
   it('answers a structured unavailable error without an engine, still carrying the usage probe', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     const meterFiber = await ctx.plugin({ name: 'stub-token-meter', apply(c) {
       c.provide('tokenMeter', { measure: () => ({ totalTokens: 4321 }) })
     } })
@@ -143,7 +143,7 @@ describe('compact() binding', () => {
   })
 
   it('validates the signature: no args or one reason string, nothing else', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     await registerStubCompaction(ctx, { compactNow: async () => null })
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
     runtime.behavior = async (request) => {
@@ -162,7 +162,7 @@ describe('compact() binding', () => {
   })
 
   it('surfaces non-busy engine failures as structured errors', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     await registerStubCompaction(ctx, {
       compactNow: () => { throw new Error('persistence backend down') },
     })
@@ -180,7 +180,7 @@ describe('compact() binding', () => {
 
 describe('compact() design A: the DASHR-scoped engine', () => {
   it('mounts a real BasicCompactionEngine under ctx.isolate with the compactModel route and auto off', async () => {
-    const { ctx } = await setup(fakeRuntime, { compactModel: 'zai/glm-5.2' })
+    const { ctx } = await setupPresentation(fakeRuntime, { compactModel: 'zai/glm-5.2' })
     // The isolation-label mount recipe apply() uses, verified directly.
     const scope = ctx.isolate('compaction')
     const engine = new BasicCompactionEngine(scope, { summarizationProvider: 'zai', summarizationModel: 'glm-5.2', auto: false })
@@ -195,7 +195,7 @@ describe('compact() design A: the DASHR-scoped engine', () => {
   })
 
   it('resolves the scoped engine, not the host one, and reaches host llm/tokenMeter outward through it', async () => {
-    const { ctx, agent } = await setup(fakeRuntime, { compactModel: 'zai/glm-5.2' }, { provider: 'deepseek', model: 'dsv3' })
+    const { ctx, agent } = await setupPresentation(fakeRuntime, { compactModel: 'zai/glm-5.2' }, { provider: 'deepseek', model: 'dsv3' })
     // Host-plane stubs the scoped engine must resolve OUTWARD to reach.
     const resolvedModels: Array<{ provider: string, model: string }> = []
     const llmFiber = await ctx.plugin({ name: 'stub-llm-pressure', apply(c) {
@@ -257,7 +257,7 @@ describe('compact() design A: the DASHR-scoped engine', () => {
   })
 
   it('pairs a bare compactModel with the calling agent provider; without one it errors structurally', async () => {
-    const bare = await setup(fakeRuntime, { compactModel: 'glm-5.2' }, { provider: 'zai', model: 'parent' })
+    const bare = await setupPresentation(fakeRuntime, { compactModel: 'glm-5.2' }, { provider: 'zai', model: 'parent' })
     // Host-plane singles the scoped engine's static inject resolves outward to.
     for (const [key, service] of [
       ['llm', { async *stream(): AsyncIterable<StreamChunk> { yield { type: 'finish', reason: { kind: 'stop' } } } }],
@@ -279,7 +279,7 @@ describe('compact() design A: the DASHR-scoped engine', () => {
     const result = await cell(bare.ctx, bare.agent.agent, 'program')
     expect(result).toMatchObject({ compact_model: { provider: 'zai', model: 'glm-5.2' } })
 
-    const unprovided = await setup(fakeRuntime, { compactModel: 'glm-5.2' })
+    const unprovided = await setupPresentation(fakeRuntime, { compactModel: 'glm-5.2' })
     const unprovidedRuntime = unprovided.ctx.get('rlmRuntime') as FakeCellRuntime
     unprovidedRuntime.behavior = async (request) => {
       const compact = request.bindings.find(binding => binding.global === 'compact')!
@@ -294,7 +294,7 @@ describe('compact() design A: the DASHR-scoped engine', () => {
     // '/glm-5.2' must NOT slip into the bare-id branch as a model id that
     // contains a slash; indexOf('/') === 0 enters the split branch and the
     // empty provider half is rejected there.
-    const bad = await setup(fakeRuntime, { compactModel: '/glm-5.2' }, { provider: 'zai', model: 'parent' })
+    const bad = await setupPresentation(fakeRuntime, { compactModel: '/glm-5.2' }, { provider: 'zai', model: 'parent' })
     const badRuntime = bad.ctx.get('rlmRuntime') as FakeCellRuntime
     badRuntime.behavior = async (request) => {
       const compact = request.bindings.find(binding => binding.global === 'compact')!

@@ -3,7 +3,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { CallId } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { FakeCellRuntime, fakeRuntime, runCell, setup } from './helpers.ts'
+import { FakeCellRuntime, fakeRuntime, runCell, setupPresentation } from './helpers.ts'
 import { resolveMaxParallelSubCalls } from '../src/index.ts'
 
 /** Register a trivial echo tool; returns the calls it received. */
@@ -38,7 +38,7 @@ async function modelDirect(ctx: Context, name: string, agent: Agent, arguments_:
 
 describe('assembly — the DASHR row collapses its scope, and only its scope', () => {
   it('a preset-scope mount leaves run_cell the only contributed tool and ships the SDK section', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     registerEcho(ctx)
     const assembly = await ctx.systemPrompt.assemble({ scope: agent.agent })
     expect(assembly.tools.map(tool => tool.name)).toEqual(['run_cell'])
@@ -50,7 +50,7 @@ describe('assembly — the DASHR row collapses its scope, and only its scope', (
   })
 
   it('a neighbor scope WITHOUT the row keeps its full native schema set (PTC coexistence, part one)', async () => {
-    const { ctx, agent, other } = await setup(fakeRuntime)
+    const { ctx, agent, other } = await setupPresentation(fakeRuntime)
     registerEcho(ctx)
     const neighbor = await ctx.systemPrompt.assemble({ scope: other.agent })
     expect(neighbor.tools.map(tool => tool.name)).toEqual(['echo'])
@@ -62,7 +62,7 @@ describe('assembly — the DASHR row collapses its scope, and only its scope', (
   })
 
   it('a global assembly (no scope) is untouched by the preset-scope row', async () => {
-    const { ctx } = await setup(fakeRuntime)
+    const { ctx } = await setupPresentation(fakeRuntime)
     registerEcho(ctx)
     const assembly = await ctx.systemPrompt.assemble()
     expect(assembly.tools.map(tool => tool.name)).toEqual(['echo'])
@@ -70,7 +70,7 @@ describe('assembly — the DASHR row collapses its scope, and only its scope', (
   })
 
   it('the SDK section regenerates from the calling scope: a restricted agent loses the tool from its SDK', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     registerEcho(ctx)
     ctx.tools.register(defineTool({
       name: 'secret',
@@ -90,7 +90,7 @@ describe('assembly — the DASHR row collapses its scope, and only its scope', (
 
 describe('the model-direct collapse guard', () => {
   it('denies a model-direct call to another tool with the route-back text', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     const calls = registerEcho(ctx)
     const result = await modelDirect(ctx, 'echo', agent.agent, { value: 'x' })
     expect(result.isError).toBe(true)
@@ -101,7 +101,7 @@ describe('the model-direct collapse guard', () => {
   })
 
   it('lets the neighbor agent call the same tool model-direct (the guard is scoped)', async () => {
-    const { ctx, other } = await setup(fakeRuntime)
+    const { ctx, other } = await setupPresentation(fakeRuntime)
     const calls = registerEcho(ctx)
     const result = await modelDirect(ctx, 'echo', other.agent, { value: 'ptc' })
     expect(result.isError).toBe(false)
@@ -109,7 +109,7 @@ describe('the model-direct collapse guard', () => {
   })
 
   it('passes run_cell itself model-direct, and nested sub-dispatches (parent token) through the bridge', async () => {
-    const { ctx, agent } = await setup(fakeRuntime)
+    const { ctx, agent } = await setupPresentation(fakeRuntime)
     const calls = registerEcho(ctx)
     const runtime = ctx.rlmRuntime as FakeCellRuntime
     runtime.behavior = async request => {
@@ -126,14 +126,14 @@ describe('config', () => {
   it('resolves the max-parallel cap with the same validation as upstream', () => {
     expect(resolveMaxParallelSubCalls(undefined)).toBe(10)
     expect(resolveMaxParallelSubCalls(1)).toBe(1)
-    expect(() => resolveMaxParallelSubCalls(0)).toThrow('dashr-tool-presentation: maxParallelSubCalls must be a positive integer')
-    expect(() => resolveMaxParallelSubCalls(1.5)).toThrow('dashr-tool-presentation: maxParallelSubCalls must be a positive integer')
+    expect(() => resolveMaxParallelSubCalls(0)).toThrow('dashr-plugin: maxParallelSubCalls must be a positive integer')
+    expect(() => resolveMaxParallelSubCalls(1.5)).toThrow('dashr-plugin: maxParallelSubCalls must be a positive integer')
   })
 
   it('mounts against a composition with no rlmRuntime by staying pending, not crashing the registry', async () => {
     // The wait is declared, not a static inject: a runtime-less deployment
     // simply never activates the row's registrations.
-    const { ctx, other } = await setup(false)
+    const { ctx, other } = await setupPresentation(false)
     registerEcho(ctx)
     const neighbor = await ctx.systemPrompt.assemble({ scope: other.agent })
     expect(neighbor.tools.map(tool => tool.name)).toEqual(['echo'])

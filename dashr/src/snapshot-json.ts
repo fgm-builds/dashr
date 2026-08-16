@@ -17,7 +17,7 @@
  * these details at runtime. Use this type for a payload that must survive a
  * serialization boundary byte-identically.
  */
-type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue }
+export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue }
 
 /** Whether a realm-owned intrinsic prototype is backed by its native constructor. */
 function hasIntrinsicConstructor(prototype: object, name: 'Array' | 'Object'): boolean {

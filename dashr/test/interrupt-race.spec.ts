@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { setup } from './helpers.ts'
+import { setupRuntime } from './helpers.ts'
 
 /**
  * M3-A regression suite for the SIGALRM-at-idle double window (blueprint §5,
@@ -28,7 +28,7 @@ const RACE_CONFIG = { interruptConfirmMs: 120, interruptGraceMs: 1_500 }
 
 describe('IPythonCodeRuntime — interrupt race windows (M3-A)', () => {
   it('survives abort fired on the same tick as run() — 10/10, pid stable', async () => {
-    const { runtime } = await setup(RACE_CONFIG)
+    const { runtime } = await setupRuntime(RACE_CONFIG)
     for (let trial = 1; trial <= 10; trial++) {
       const controller = new AbortController()
       const pending = runtime.run({ program: `race_marker = ${trial}`, bindings: [], signal: controller.signal })
@@ -49,7 +49,7 @@ describe('IPythonCodeRuntime — interrupt race windows (M3-A)', () => {
 
   it('survives abort during cold boot — 10/10 fresh kernels', async () => {
     for (let trial = 1; trial <= 10; trial++) {
-      const { runtime } = await setup(RACE_CONFIG)
+      const { runtime } = await setupRuntime(RACE_CONFIG)
       const controller = new AbortController()
       const pending = runtime.run({ program: 'print("boot-race")', bindings: [], signal: controller.signal })
       // Wait for the subprocess to exist, then abort while it is still
@@ -77,7 +77,7 @@ describe('IPythonCodeRuntime — interrupt race windows (M3-A)', () => {
   }, 120_000)
 
   it('survives an abort that fires while its run sits queued behind a busy cell (idle-kernel ladder) — 10/10', async () => {
-    const { runtime } = await setup(RACE_CONFIG)
+    const { runtime } = await setupRuntime(RACE_CONFIG)
     await runtime.run({ program: 'queued_warm = 1', bindings: [] })
     const pid = runtime.kernelPids[0]
     expect(pid).toBeDefined()
@@ -103,7 +103,7 @@ describe('IPythonCodeRuntime — interrupt race windows (M3-A)', () => {
   }, 60_000)
 
   it('still breaks a busy while-True loop on abort, inside the grace — hard-abort contract', async () => {
-    const { runtime } = await setup(RACE_CONFIG)
+    const { runtime } = await setupRuntime(RACE_CONFIG)
     await runtime.run({ program: 'busy_warm = 1', bindings: [] })
     const pid = runtime.kernelPids[0]
     for (let trial = 1; trial <= 10; trial++) {

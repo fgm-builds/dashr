@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CodeBindingFunction, CodeBindingNamespace } from '../src/vendored/rlm-runtime.ts'
-import { setup } from './helpers.ts'
+import { setupRuntime } from './helpers.ts'
 
 /** One namespace `tools` with a typed rejection class, worker-thread test style. */
 function tools(functions: Record<string, CodeBindingFunction>): CodeBindingNamespace[] {
@@ -13,7 +13,7 @@ function tools(functions: Record<string, CodeBindingFunction>): CodeBindingNames
 
 describe('IPythonCodeRuntime — host bindings over the comm bridge', () => {
   it('carries a kernel-side call to the host fn and its resolution back', async () => {
-    const { runtime } = await setup()
+    const { runtime } = await setupRuntime()
     const received: unknown[] = []
     const result = await runtime.run({
       program: 'reply = await tools.echo({"n": 41})\nprint(reply["n"] + 1)\nreturn reply',
@@ -32,7 +32,7 @@ describe('IPythonCodeRuntime — host bindings over the comm bridge', () => {
   })
 
   it('keeps host-bound state usable across runs on the same kernel', async () => {
-    const { runtime } = await setup()
+    const { runtime } = await setupRuntime()
     const calls: string[] = []
     const bindings = tools({ note: async (args: unknown) => { calls.push(String((args as { text: string }).text)); return calls.length } })
     const first = await runtime.run({ program: 'count = await tools.note({"text": "one"})', bindings })
@@ -44,7 +44,7 @@ describe('IPythonCodeRuntime — host bindings over the comm bridge', () => {
   })
 
   it('turns a host rejection into the declared typed error class', async () => {
-    const { runtime } = await setup()
+    const { runtime } = await setupRuntime()
     const result = await runtime.run({
       program: [
         'caught = {}',
@@ -63,7 +63,7 @@ describe('IPythonCodeRuntime — host bindings over the comm bridge', () => {
   })
 
   it('answers an unknown binding name with a rejection, not a host crash', async () => {
-    const { runtime } = await setup()
+    const { runtime } = await setupRuntime()
     const result = await runtime.run({
       program: [
         'message = "no-error"',
@@ -80,7 +80,7 @@ describe('IPythonCodeRuntime — host bindings over the comm bridge', () => {
   })
 
   it('rejects a lossy host resolution with a descriptive error', async () => {
-    const { runtime } = await setup()
+    const { runtime } = await setupRuntime()
     const result = await runtime.run({
       program: [
         'message = "no-error"',
