@@ -4,22 +4,48 @@
   <a href="https://github.com/fgm-builds/dashr/actions"><img src="https://img.shields.io/badge/tests-140%20passing-brightgreen.svg?style=flat-square" alt="Tests" /></a>
   <a href="https://github.com/fgm-builds/dashr/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License" /></a>
   <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/plugin%20for-dsh-blueviolet.svg?style=flat-square" alt="DSH Plugin" /></a>
+  <a href="https://npmjs.com/package/dashr-plugin"><img src="https://img.shields.io/badge/npm-dashr--plugin-CB3837.svg?style=flat-square&logo=npm" alt="npm package" /></a>
+  <a href="https://arxiv.org/abs/2512.24601"><img src="https://img.shields.io/badge/paper-arXiv%3A2512.24601-B31B1B.svg?style=flat-square" alt="Paper arXiv:2512.24601" /></a>
   <a href="https://github.com/fgm-builds/dashr"><img src="https://img.shields.io/badge/github-fgm--builds%2Fdashr-black.svg?style=flat-square&logo=github" alt="Repository" /></a>
 </p>
 
 ---
 
-**Dashr** is an open-source plugin for the [DeepSeek Harness (`dsh`)](https://github.com/deepseek-ai/deepseek-harness) agent runtime. Once installed, it equips DSH with the **Recursive Language Model (RLM)** interaction paradigm and the **"Context is Variable"** architecture, registering a dedicated `dashr` agent preset.
+## ⚡ Quick Install
 
-Instead of paying massive token costs on every round-trip tool call in standard multi-turn chat, Dashr provides the agent with a **stateful, persistent Python kernel**. The agent writes self-contained Python programs per cell, manipulating context, tools, and memory as native variables.
+```bash
+curl -fsSL https://raw.githubusercontent.com/fgm-builds/dashr/main/install.sh | bash
+```
+
+### Alternative: DSH Plugin CLI (NPM)
+
+```bash
+dsh plugin --profile web add dashr-plugin
+```
+
+> After installation, launch `dsh web` and select the **DASHR** agent preset.
+
+---
+
+## 📖 Overview
+
+**Dashr** is an open-source plugin for the [DeepSeek Harness (`dsh`)](https://github.com/deepseek-ai/deepseek-harness) agent runtime. It equips DSH with the **Recursive Language Model (RLM)** interaction paradigm and the **"Context is Variable"** architecture, registering a dedicated `dashr` agent preset upon installation.
+
+Instead of paying massive token costs on every round-trip tool call in standard multi-turn chat, Dashr equips the agent with a **stateful, persistent Python kernel**. The agent writes self-contained Python programs per cell, manipulating context, tools, and memory as native variables.
+
+```
+cell 1:  df = tools.read("large_dataset.csv").as_dataframe()   # data stays in kernel memory
+cell 2:  summary = df.describe().to_dict()                     # intermediate computation survives
+cell 3:  tools.write("report.json", summary)                   # zero prompt context pollution
+```
 
 ---
 
 ## 💡 Background & RLM Architecture
 
-Large Language Models (LLMs) operate under strict context window limits. Even with larger context windows, standard agent architectures suffer from **quadratic attention overhead, distraction, and context dilution**.
+Large Language Models (LLMs) operate under strict context window limits. Even with extended window sizes, standard agent architectures suffer from **quadratic attention overhead, distraction, and context dilution**.
 
-Dashr implements the **Recursive Language Model (RLM)** paradigm to solve this bottleneck:
+Dashr implements the **Recursive Language Model (RLM)** architecture ([arXiv:2512.24601](https://arxiv.org/abs/2512.24601)) to solve this bottleneck:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -79,47 +105,6 @@ The core mechanism of **Recursive Language Models (RLM)**:
 
 ---
 
-## 🚀 Quick Start
-
-### One-Line Automated Installation
-
-Install DSH (if missing), configure Python dependencies, and register Dashr plugin & preset:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/fgm-builds/dashr/main/install.sh | bash
-```
-
-**What the installer does:**
-1. Verifies prerequisites (`Node.js ≥ 20`, `npm`, `python3`).
-2. Installs `@deepseek-ai/dsh` if not already installed.
-3. Sets up a dedicated Python virtualenv with `ipykernel` at `~/.dsh/dashr-kernel-venv`.
-4. Builds and installs `dashr-plugin` into DSH.
-5. Registers the `dashr` agent preset into `~/.dsh/.agent-presets/dashr/`.
-
-After installation, start or restart DSH:
-```bash
-dsh web
-```
-Then select the **DASHR** agent preset in the web UI.
-
----
-
-### Manual Installation & Build
-
-```bash
-# 1. Build and package the plugin
-cd dashr && npm install && npm run build && npm pack
-
-# 2. Register plugin to DSH profile
-dsh plugin --profile web add --config.auto-install-peers=false ./dashr-plugin-0.1.0.tgz
-
-# 3. Copy and localize the preset
-mkdir -p ~/.dsh/.agent-presets/dashr
-cp -r dashr/preset/dashr/* ~/.dsh/.agent-presets/dashr/
-```
-
----
-
 ## 🔒 Security Model
 
 - **Tool Governance**: Calls to `tools.*` run through DSH's host tool pipeline, where approval and sandbox policies apply normally.
@@ -130,10 +115,27 @@ cp -r dashr/preset/dashr/* ~/.dsh/.agent-presets/dashr/
 ## 🧪 Development & Testing
 
 ```bash
+# Build & run test suite (140 tests passing)
 cd dashr
 npm install
-npm test   # 140 tests passing
+npm test
 ```
+
+---
+
+## 📚 References & Academic Credit
+
+The architecture and design of Dashr build upon groundbreaking research in recursive agent execution and persistent prompt harnesses:
+
+1. **Recursive Language Models (RLM)**  
+   *Recursive Language Models*, 2025.  
+   Paper: [arXiv:2512.24601](https://arxiv.org/abs/2512.24601)  
+   *Establishes the recursive decomposition and sub-agent execution paradigm for bounded context management.*
+
+2. **Continual Harness & Prompt Refinement**  
+   *Continual Harness for Autonomous Agents*, 2026.  
+   Paper: [arXiv:2605.09998](https://arxiv.org/abs/2605.09998)  
+   *Foundational formulation for dynamic prompt refinement and in-loop compaction.*
 
 ---
 
