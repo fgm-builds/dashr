@@ -31,6 +31,9 @@ trap 'rm -rf "$TMP_ROOT"' EXIT
 step "1/5 scanning environment"
 command -v node    >/dev/null || die "node not found — install Node.js >= 20 first"
 command -v npm     >/dev/null || die "npm not found"
+NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
+[ "$NODE_MAJOR" -ge 20 ] || die "node $(node -v) is too old — install Node.js >= 20 first"
+[ "$NODE_MAJOR" -ge 22 ] || step "warning: node $(node -v) is below the recommended 22; dsh may misbehave"
 command -v python3 >/dev/null || die "python3 not found"
 command -v curl    >/dev/null || command -v git >/dev/null || die "need curl or git"
 
@@ -38,21 +41,21 @@ command -v curl    >/dev/null || command -v git >/dev/null || die "need curl or 
 if command -v dsh >/dev/null 2>&1; then
   info "dsh found at $(command -v dsh)"
 else
-  step "2/5 dsh not found — installing latest via npm"
-  if npm install -g @deepseek-ai/dsh@latest >/dev/null 2>&1; then
+  step "2/5 dsh not found — installing latest via npm (large install: ~60 packages + a native addon; expect 2-5 minutes, do not interrupt)"
+  if npm install -g @deepseek-ai/dsh@latest; then
     info "dsh installed globally"
   else
-    PREFIX="$(npm prefix 2>/dev/null || true)"
-    [ -n "$PREFIX" ] || die "npm prefix unavailable"
-    info "npm -g not writable — installing into $PREFIX"
-    npm install --prefix "$PREFIX" @deepseek-ai/dsh@latest >/dev/null
+    info "npm -g not writable — installing into $HOME/.local"
+    mkdir -p "$HOME/.local"
+    npm install --prefix "$HOME/.local" @deepseek-ai/dsh@latest
+    export PATH="$HOME/.local/bin:$PATH"
   fi
-  command -v dsh >/dev/null || die "dsh installed but not on PATH; add $(npm prefix)/bin to PATH and re-run"
 fi
+DSH="$(command -v dsh)" || die "dsh installed but not on PATH; add <npm-prefix>/bin to PATH and re-run"
 
 # Resolve the installed dsh's standard agent composition (the preset include
 # target). npm layout: <prefix>/bin/dsh -> <prefix>/lib/node_modules/@deepseek-ai/dsh/lib/bin.js
-DSH_REAL="$(readlink -f "$(command -v dsh)")"
+DSH_REAL="$(readlink -f "$DSH")"
 STD_PRESET=""
 for cand in \
   "$(dirname "$DSH_REAL")/../config/agent-presets/standard/agent.cordis.yml" \
@@ -85,7 +88,7 @@ if [ -n "$DASHR_SRC" ]; then
   info "using local source: $SRC (skipping fetch)"
   if [ ! -d "$SRC/dashr/lib" ]; then
     info "building dsh-rlm-mode (lib/ missing)"
-    (cd "$SRC/dashr" && npm install --no-audit --no-fund >/dev/null && npm run build >/dev/null)
+    (cd "$SRC/dashr" && npm install --no-audit --no-fund && npm run build)
   fi
   (cd "$SRC/dashr" && npm pack --pack-destination "$TMP_ROOT" >/dev/null)
 else
@@ -102,8 +105,8 @@ else
   mkdir -p "$TMP_ROOT/src"
   tar -xzf "$ARCHIVE" -C "$TMP_ROOT/src" --strip-components=1
   SRC="$TMP_ROOT/src"
-  info "building dsh-rlm-mode"
-  (cd "$SRC/dashr" && npm install --no-audit --no-fund >/dev/null && npm run build >/dev/null)
+  info "building dsh-rlm-mode (1-2 minutes)"
+  (cd "$SRC/dashr" && npm install --no-audit --no-fund && npm run build)
   (cd "$SRC/dashr" && npm pack --pack-destination "$TMP_ROOT" >/dev/null)
 fi
 
@@ -112,7 +115,7 @@ step "5/5 installing plugins into profile '$DSH_PROFILE' and localizing the pres
 # --config.auto-install-peers=false is MANDATORY: the profile already resolves
 # @deepseek-ai/* peers through the harness install; letting pnpm auto-install
 # them would add a second (divergent) copy of cordis and friends.
-dsh plugin --profile "$DSH_PROFILE" add --config.auto-install-peers=false \
+"$DSH" plugin --profile "$DSH_PROFILE" add --config.auto-install-peers=false \
   "$TMP_ROOT/dsh-rlm-mode-"*.tgz
 
 PRESET_DIR="$DSH_HOME_DIR/.agent-presets/dashr"
