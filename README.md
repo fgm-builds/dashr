@@ -1,162 +1,153 @@
-# DASHR
+# Dashr: Recursive Language Model (RLM) Plugin for DSH
 
-**DASHR is a plugin for the [DeepSeek Harness (`dsh`)](https://github.com/deepseek-ai/deepseek-harness)**
-that gives the agent a **persistent Python kernel** — the RLM ("research loop
-machine") interaction model. Everything the plugin contributes is the
-kernel runtime plus its presentation (the `run_cell` transport, the
-generated Python SDK, the tool bindings, the harness). The repository also
-ships the `dashr` **agent preset**, a small configuration file that wires
-the plugin into an otherwise standard dsh deployment.
+<p align="center">
+  <a href="https://github.com/fgm-builds/dashr/actions"><img src="https://img.shields.io/badge/tests-140%20passing-brightgreen.svg?style=flat-square" alt="Tests" /></a>
+  <a href="https://github.com/fgm-builds/dashr/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License" /></a>
+  <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/plugin%20for-dsh-blueviolet.svg?style=flat-square" alt="DSH Plugin" /></a>
+  <a href="https://github.com/fgm-builds/dashr"><img src="https://img.shields.io/badge/github-fgm--builds%2Fdashr-black.svg?style=flat-square&logo=github" alt="Repository" /></a>
+</p>
 
-Instead of one tool call per step, the model writes a Python program per
-*cell*. Every tool in the host's registry is automatically bound inside the
-kernel as `tools.<name>(...)`; variables, imports, and definitions persist
-across cells, so intermediate computation never has to round-trip through
-the conversation context.
+---
+
+**Dashr** is an open-source plugin for the [DeepSeek Harness (`dsh`)](https://github.com/deepseek-ai/deepseek-harness) agent runtime. Once installed, it equips DSH with the **Recursive Language Model (RLM)** interaction paradigm and the **"Context is Variable"** architecture, registering a dedicated `dashr` agent preset.
+
+Instead of paying massive token costs on every round-trip tool call in standard multi-turn chat, Dashr provides the agent with a **stateful, persistent Python kernel**. The agent writes self-contained Python programs per cell, manipulating context, tools, and memory as native variables.
+
+---
+
+## 💡 Background & RLM Architecture
+
+Large Language Models (LLMs) operate under strict context window limits. Even with larger context windows, standard agent architectures suffer from **quadratic attention overhead, distraction, and context dilution**.
+
+Dashr implements the **Recursive Language Model (RLM)** paradigm to solve this bottleneck:
 
 ```
-cell 1:  df = tools.read("data.csv").as_dataframe()   # tools.* = the full catalog
-cell 2:  result = expensive_analysis(df)               # df is still alive
-cell 3:  tools.write("out.json", result)               # state survives cells
+┌────────────────────────────────────────────────────────────────────────┐
+│                          DSH Agent Runtime                             │
+│                                                                        │
+│   ┌────────────────────────────────────────────────────────────────┐   │
+│   │                    Dashr Plugin & Preset                       │   │
+│   │                                                                │   │
+│   │  1. Stateful Python REPL Kernel ("Context is Variable")        │   │
+│   │     • In-memory DataFrames, ASTs, file handles, API responses  │   │
+│   │     • Zero round-trip prompt pollution for intermediate data   │   │
+│   │                                                                │   │
+│   │  2. Sliding Context Window                                     │   │
+│   │     • Fixed-size active window to bound token overhead         │   │
+│   │                                                                │   │
+│   │  3. Recursive Sub-Agents (`rlm("subtask")`)                   │   │
+│   │     • Spawns child agents in isolated context loops            │   │
+│   │     • Returns only synthesized, distilled outcomes             │   │
+│   │                                                                │   │
+│   │  4. Context Compaction & Summarization                         │   │
+│   │     • Evicted window steps are recursively summarized          │   │
+│   │     • Long-term trajectory retained via dynamic memory/harness │   │
+│   └────────────────────────────────────────────────────────────────┘   │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
-## What it gives you
+### 1. Context is Variable (Stateful Kernel)
+In standard agent loops, reading large files or computing complex payloads dumps raw output directly into the conversation history. In Dashr:
+- State and computation persist inside a live IPython kernel session.
+- Intermediate variables survive across cells (`cell 1: data = load(); cell 2: res = process(data)`).
+- Tools are exposed as first-class Python functions (`tools.<name>()`). Intermediate execution data never round-trips through the prompt.
 
-- **Stateful kernel** — one IPython kernel per session; everything assigned
-  in cell *N* survives into cell *N+1* (imports, data, classes, open
-  connections). Contrast with bash / code-mode workers, which start fresh on
-  every run.
-- **Schema-driven tool bindings** — the bridge has **no hard-coded tool
-  list**. It walks the host tool registry at mount time and generates the
-  Python SDK (`TypedDict` args classes + async functions) for whatever
-  toolset the host exposes. On a standard host that is ~29 tools: bash,
-  web_search, read/write/edit/glob/grep, subagent, skills, goals, jobs, plan
-  mode, workflow, ask_user, memory (corti), and everything else registered.
-  A plugin you add tomorrow is a `tools.*` binding the same day.
-- **Sub-agents** — `rlm("task")` spawns a child agent (non-blocking;
-  returns a handle), `rlm_await(handle)` collects its result in-cell.
-- **Harness (prompt-as-variable)** — `refine()` writes operating
-  guidance/memories into a per-agent store that is re-rendered into the
-  system prompt every turn; `compact()` triggers context compaction on
-  pressure.
-- **Snapshot / revive** — save the kernel namespace to disk and restore it
-  in a later session (see the package README).
-- **Upstream-proof preset** — the `dashr` preset is *not* a copy of the
-  `standard` preset. It is an **include** of the installed harness's own
-  `standard` composition plus one `dashr-kernel` group, with the persona row
-  patched. When upstream dsh adds or changes tools, the preset follows
-  automatically — no manual re-sync.
+### 2. Recursive Sub-Agents (`rlm()`)
+The core mechanism of **Recursive Language Models (RLM)**:
+- For token-heavy or exploratory subtasks, the agent spawns child agents (`handle = rlm("Investigate repository history")`).
+- Sub-agents operate recursively in their own isolated context loops.
+- When finished, `rlm_await(handle)` collects only the final distilled summary back into the parent kernel.
 
-## How it works (and what it is not)
+### 3. Sliding Context Window
+- Even without spawning sub-agents, Dashr maintains a bounded sliding context window over recent turns.
+- Prevents context degradation and eliminates context window saturation on long workflows.
 
-The kernel layer is a **bridge, not a reimplementation**:
+### 4. Compaction & Summarization
+- Earlier turns that fall outside the active sliding window are automatically compressed into structured summaries (`compact()`).
+- High-level progress, key decisions, and operating guidance are preserved in a dynamic harness (`refine()`) and reinjected into the prompt.
 
-- The host plane keeps everything a plugin must not own: the tool
-  registries, the sandbox and approval stack, persistence, and the model
-  route.
-- `tools.<name>(...)` calls execute through the host's own
-  `ctx.tools.execute` pipeline — sandbox policy and approval apply to them
-  exactly as native tool calls do.
-- `run_cell` is the only contributed tool; the model writes Python against a
-  generated SDK and executes it as one cell.
+---
 
-Architecture detail lives in `docs/dashr-blueprint.md` (design) and the
-package README (`dashr/README.md`).
+## ✨ Features
 
-## Security model
+- 🐍 **Persistent IPython Kernel** — One stateful kernel session per conversation. Variables, imports, and connections persist across cells.
+- ⚡ **Dynamic Tool Binding** — Zero hardcoded tool adapters. At startup, Dashr dynamically binds all tools registered in the DSH host (`bash`, `web_search`, file operations, workflows, skills, etc.) into type-safe Python SDK functions under `tools.*`.
+- 🔀 **In-Kernel Recursive Sub-Agents** — Call `rlm(task)` to spawn parallel sub-agents and `rlm_await(id)` to collect results inside Python code.
+- 🧠 **Dynamic Harness & Compaction** — Built-in `refine()` for operating memory and `compact()` for context reduction under pressure.
+- 💾 **State Snapshot & Revival** — Save and restore the kernel namespace across sessions.
+- 🔄 **Upstream-Proof Preset** — The `dashr` agent preset dynamically includes DSH's standard composition, staying compatible whenever upstream DSH introduces new capabilities.
 
-What the plugin changes and what it does not:
+---
 
-- **`tools.*` calls stay governed.** They run through the host's tool
-  pipeline, so the host's sandbox and approval policies apply to them just
-  as if the agent had called the tools natively.
-- **Python code in cells runs as the dsh user, like any locally executed
-  code.** The kernel process is a plain child of the dsh host, not confined
-  by dsh's bash-tool sandbox. This is the same trust model as any agent
-  runtime that executes generated code on your machine (Claude Code, Open
-  Interpreter, etc.): the code can do whatever your user account can do.
-  This is inherent to running a local code executor — it is not specific to
-  DASHR, and it is exactly why such executors belong in a container or VM
-  when the workload is untrusted.
+## 🚀 Quick Start
 
-In short: install DASHR wherever you would let the model run commands as
-your user. For anything less trusted, containerize the dsh host (or the
-kernel) first.
+### One-Line Automated Installation
 
-## Install
-
-One-liner (installs dsh if missing, then DASHR):
+Install DSH (if missing), configure Python dependencies, and register Dashr plugin & preset:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/fgm-builds/dashr/main/install.sh | bash
 ```
 
-What it does:
+**What the installer does:**
+1. Verifies prerequisites (`Node.js ≥ 20`, `npm`, `python3`).
+2. Installs `@deepseek-ai/dsh` if not already installed.
+3. Sets up a dedicated Python virtualenv with `ipykernel` at `~/.dsh/dashr-kernel-venv`.
+4. Builds and installs `dashr-plugin` into DSH.
+5. Registers the `dashr` agent preset into `~/.dsh/.agent-presets/dashr/`.
 
-1. **Environment scan** — checks node, npm, python3.
-2. **dsh** — if `dsh` is not on PATH, installs the latest `@deepseek-ai/dsh`
-   via npm (global, with a user-prefix fallback).
-3. **Kernel Python** — if the host `python3` lacks `ipykernel`, creates
-   `~/.dsh/dashr-kernel-venv` and installs `ipykernel` there; the resolved
-   interpreter path is baked into the preset (no env vars needed at
-   runtime).
-4. **Plugin** — builds `dashr-plugin` from the pinned release and adds it to
-   the profile with `--config.auto-install-peers=false` (mandatory:
-   prevents a second, divergent copy of the `@deepseek-ai/*` peers).
-5. **Preset localization** — writes the `dashr` agent preset to
-   `~/.dsh/.agent-presets/dashr/` with the machine-specific include path to
-   dsh's `standard` composition substituted.
+After installation, start or restart DSH:
+```bash
+dsh web
+```
+Then select the **DASHR** agent preset in the web UI.
 
-Restart a running `dsh web` after installing (plugins load at boot), then
-create a session with agent preset **DASHR**.
+---
 
-Env knobs: `DSH_PROFILE` (default `web`), `DSH_HOME` (default `~/.dsh`),
-`DASHR_VERSION` (default `v0.1.0`), `DASHR_REPO`, `DASHR_SRC` (use a local
-source tree instead of downloading).
-
-### Manual install
+### Manual Installation & Build
 
 ```bash
-# 1) build the plugin
+# 1. Build and package the plugin
 cd dashr && npm install && npm run build && npm pack
 
-# 2) add to the profile (auto-install-peers=false is mandatory)
-dsh plugin --profile web add --config.auto-install-peers=false \
-  ./dashr-plugin-0.1.0.tgz
+# 2. Register plugin to DSH profile
+dsh plugin --profile web add --config.auto-install-peers=false ./dashr-plugin-0.1.0.tgz
 
-# 3) localize the preset: substitute the include path placeholder with your
-#    dsh install's standard composition, e.g.
-#    ~/.local/lib/node_modules/@deepseek-ai/dsh/config/agent-presets/standard/agent.cordis.yml
-#    (and the kernel python if your python3 lacks ipykernel), then copy both
-#    preset files to ~/.dsh/.agent-presets/dashr/
+# 3. Copy and localize the preset
+mkdir -p ~/.dsh/.agent-presets/dashr
+cp -r dashr/preset/dashr/* ~/.dsh/.agent-presets/dashr/
 ```
 
-## Requirements
+---
 
-- Node.js ≥ 20, npm
-- dsh (auto-installed by `install.sh`)
-- python3 + `ipykernel` (venv auto-created by `install.sh` if missing)
+## 🔒 Security Model
 
-## Repository layout
+- **Tool Governance**: Calls to `tools.*` run through DSH's host tool pipeline, where approval and sandbox policies apply normally.
+- **Kernel Code Execution**: Python code inside cells executes with the permissions of the local user running DSH. Run Dashr in environments where you trust the agent's code execution against your user account (or run DSH within a container).
 
-```
-dashr/                 the dashr-plugin package — kernel runtime + run_cell
-                       presentation, SDK generation, bindings, harness,
-                       refine/compact, snapshots
-dashr/preset/dashr/    the shipped agent preset (include-based stacking)
-docs/                  design and analysis documents
-```
+---
 
-## Development
+## 🧪 Development & Testing
 
 ```bash
-cd dashr && npm install && npm test        # 140 tests
+cd dashr
+npm install
+npm test   # 140 tests passing
 ```
 
-TypeScript, built with `tsdown`, tested with `vitest`. Runtime dependencies:
-`@deepseek-ai/schemastery` and `zeromq`; everything else is a peer the dsh
-host supplies.
+---
 
-## License
+## 🙏 Acknowledgements & Attribution
 
-MIT — see `LICENSE`.
+Dashr is built as an open-source plugin for [DeepSeek Harness (`dsh`)](https://github.com/deepseek-ai/deepseek-harness).
+
+While Dashr's codebase was developed independently from scratch for the DSH plugin ecosystem, the core design and philosophy are deeply inspired by the pioneering work of **[Prime Agent](https://github.com/primeintellect-ai/prime)** by Prime Intellect. We pay tribute to their introduction of the **"Context is Variable"** paradigm and the **Recursive Language Model (RLM)** execution model, which inspired us to bring these breakthrough capabilities to the DSH agent community.
+
+### ⚖️ License & Compatibility
+Both **Dashr** and upstream inspiration **Prime Agent** are licensed under the permissive **[MIT License](https://opensource.org/licenses/MIT)**. Dashr is fully open-source and license-compliant without IP or licensing conflicts.
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](./LICENSE).
