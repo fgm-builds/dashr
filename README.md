@@ -19,10 +19,12 @@ curl -fsSL https://raw.githubusercontent.com/fgm-builds/dashr/main/install.sh | 
 ### Alternative: DSH Plugin CLI (NPM)
 
 ```bash
-dsh plugin --profile web add dsh-rlm-mode
+dsh plugin --profile web add --config.auto-install-peers=false dsh-rlm-mode
+# then copy the preset files (install.sh does this for you):
+#   <profile>/node_modules/dsh-rlm-mode/preset/rlm-mode/*  →  ~/.dsh/.agent-presets/rlm-mode/
 ```
 
-> After installation, launch `dsh web` and select the **Dashr** agent preset.
+> After installation, launch `dsh web` and select the **RLM Mode** agent preset.
 
 ---
 

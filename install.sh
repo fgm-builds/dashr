@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # DASHR one-click installer.
 #
-# Installs (or reuses) the DeepSeek Harness (dsh), installs the single
-# DASHR plugin package (`dsh-rlm-mode`) into a dsh profile, localizes the
-# `dashr` agent preset (include path + kernel Python baked in), and makes
-# sure the kernel Python environment has `ipykernel`.
+# Installs (or reuses) the DeepSeek Harness (dsh), installs the DASHR
+# plugin (`dsh-rlm-mode`, from the npm registry; source build as fallback),
+# localizes the `rlm-mode` agent preset (include path + kernel Python baked
+# in), and makes sure the kernel Python environment has `ipykernel`.
 #
 # Env knobs:
 #   DSH_PROFILE     dsh profile to install into            (default: web)
 #   DSH_HOME        dsh harness home                       (default: ~/.dsh)
 #   DASHR_VERSION   repo ref (tag or branch) to fetch      (default: v0.1.0)
 #   DASHR_REPO      repo origin                            (default: github.com/fgm-builds/dashr)
-#   DASHR_SRC       existing source dir; skips fetch/build (default: unset)
+#   DASHR_SRC       existing source dir for the offline fallback  (default: unset)
 set -euo pipefail
 
 DSH_PROFILE="${DSH_PROFILE:-web}"
@@ -82,50 +82,57 @@ else
   info "kernel python: $KERNEL_PY"
 fi
 
-# ------------------------------------------------------ 4. fetch + build
-if [ -n "$DASHR_SRC" ]; then
-  SRC="$DASHR_SRC"
-  info "using local source: $SRC (skipping fetch)"
+# ---------------------------------------------------- 4. plugin install
+step "4/5 installing the dsh-rlm-mode plugin"
+PRESET_SRC=""
+if "$DSH" plugin --profile "$DSH_PROFILE" add --config.auto-install-peers=false dsh-rlm-mode@latest; then
+  info "installed dsh-rlm-mode from the npm registry"
+  PRESET_SRC="$DSH_HOME_DIR/profiles/$DSH_PROFILE/node_modules/dsh-rlm-mode/preset/rlm-mode"
+else
+  # Offline / registry-blocked fallback: build the pinned release from source.
+  info "registry install failed — falling back to building $DASHR_VERSION from source"
+  if [ -n "$DASHR_SRC" ]; then
+    SRC="$DASHR_SRC"
+    info "using local source: $SRC (skipping fetch)"
+  else
+    ARCHIVE="$TMP_ROOT/dashr-src.tar.gz"
+    if [ "$DASHR_VERSION" = "main" ]; then
+      curl -fsSL "$DASHR_REPO/archive/refs/heads/main.tar.gz" -o "$ARCHIVE" \
+        || die "download failed: $DASHR_REPO (main)"
+    else
+      curl -fsSL "$DASHR_REPO/archive/refs/tags/$DASHR_VERSION.tar.gz" -o "$ARCHIVE" \
+        || curl -fsSL "$DASHR_REPO/archive/refs/heads/$DASHR_VERSION.tar.gz" -o "$ARCHIVE" \
+        || die "download failed: $DASHR_REPO (tag or branch $DASHR_VERSION)"
+    fi
+    mkdir -p "$TMP_ROOT/src"
+    tar -xzf "$ARCHIVE" -C "$TMP_ROOT/src" --strip-components=1
+    SRC="$TMP_ROOT/src"
+  fi
   if [ ! -d "$SRC/dashr/lib" ]; then
-    info "building dsh-rlm-mode (lib/ missing)"
+    info "building dsh-rlm-mode (lib/ missing, 1-2 minutes)"
     (cd "$SRC/dashr" && npm install --no-audit --no-fund && npm run build)
   fi
   (cd "$SRC/dashr" && npm pack --pack-destination "$TMP_ROOT" >/dev/null)
-else
-  step "4/5 fetching dashr $DASHR_VERSION"
-  ARCHIVE="$TMP_ROOT/dashr-src.tar.gz"
-  if [ "$DASHR_VERSION" = "main" ]; then
-    curl -fsSL "$DASHR_REPO/archive/refs/heads/main.tar.gz" -o "$ARCHIVE" \
-      || die "download failed: $DASHR_REPO (main)"
-  else
-    curl -fsSL "$DASHR_REPO/archive/refs/tags/$DASHR_VERSION.tar.gz" -o "$ARCHIVE" \
-      || curl -fsSL "$DASHR_REPO/archive/refs/heads/$DASHR_VERSION.tar.gz" -o "$ARCHIVE" \
-      || die "download failed: $DASHR_REPO (tag or branch $DASHR_VERSION)"
-  fi
-  mkdir -p "$TMP_ROOT/src"
-  tar -xzf "$ARCHIVE" -C "$TMP_ROOT/src" --strip-components=1
-  SRC="$TMP_ROOT/src"
-  info "building dsh-rlm-mode (1-2 minutes)"
-  (cd "$SRC/dashr" && npm install --no-audit --no-fund && npm run build)
-  (cd "$SRC/dashr" && npm pack --pack-destination "$TMP_ROOT" >/dev/null)
+  "$DSH" plugin --profile "$DSH_PROFILE" add --config.auto-install-peers=false \
+    "$TMP_ROOT/dsh-rlm-mode-"*.tgz
+  PRESET_SRC="$SRC/dashr/preset/rlm-mode"
 fi
+[ -f "$PRESET_SRC/agent.cordis.yml" ] || die "preset files not found under $PRESET_SRC"
 
-# ---------------------------------------------------- 5. plugin + preset
-step "5/5 installing plugins into profile '$DSH_PROFILE' and localizing the preset"
-# --config.auto-install-peers=false is MANDATORY: the profile already resolves
-# @deepseek-ai/* peers through the harness install; letting pnpm auto-install
-# them would add a second (divergent) copy of cordis and friends.
-"$DSH" plugin --profile "$DSH_PROFILE" add --config.auto-install-peers=false \
-  "$TMP_ROOT/dsh-rlm-mode-"*.tgz
-
+# ---------------------------------------------------- 5. preset localization
+step "5/5 localizing the rlm-mode agent preset"
+# --config.auto-install-peers=false is MANDATORY on the add above: the
+# profile already resolves @deepseek-ai/* peers through the harness install;
+# letting the package manager auto-install them would add a second
+# (divergent) copy of cordis and friends.
 PRESET_DIR="$DSH_HOME_DIR/.agent-presets/rlm-mode"
 mkdir -p "$PRESET_DIR"
 # Bake in the machine-specific include target (the include row is a group
 # entry, so it cannot use an env expression) and the resolved kernel Python.
 sed -e "s|DASHR_PLACEHOLDER_standard_preset_path_install_script_required|$STD_PRESET|" \
     -e "s|python: !!js process.env.DASHR_KERNEL_PYTHON ?? 'python3'|python: $KERNEL_PY|" \
-    "$SRC/dashr/preset/dashr/agent.cordis.yml" > "$PRESET_DIR/agent.cordis.yml"
-cp "$SRC/dashr/preset/dashr/preset.yml" "$PRESET_DIR/preset.yml"
+    "$PRESET_SRC/agent.cordis.yml" > "$PRESET_DIR/agent.cordis.yml"
+cp "$PRESET_SRC/preset.yml" "$PRESET_DIR/preset.yml"
 info "preset localized at $PRESET_DIR"
 
 # ------------------------------------------------------------- restart note
