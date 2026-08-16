@@ -1,12 +1,11 @@
 # Dashr: Recursive Language Model (RLM) Plugin for DSH
 
 <p align="center">
-  <a href="https://github.com/fgm-builds/dashr/actions"><img src="https://img.shields.io/badge/tests-140%20passing-brightgreen.svg?style=flat-square" alt="Tests" /></a>
-  <a href="https://github.com/fgm-builds/dashr/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License" /></a>
   <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/plugin%20for-dsh-blueviolet.svg?style=flat-square" alt="DSH Plugin" /></a>
-  <a href="https://npmjs.com/package/dashr-plugin"><img src="https://img.shields.io/badge/npm-dashr--plugin-CB3837.svg?style=flat-square&logo=npm" alt="npm package" /></a>
+  <a href="https://npmjs.com/package/dsh-rlm-mode"><img src="https://img.shields.io/badge/npm-dsh-rlm-mode-CB3837.svg?style=flat-square&logo=npm" alt="npm package" /></a>
   <a href="https://arxiv.org/abs/2512.24601"><img src="https://img.shields.io/badge/paper-arXiv%3A2512.24601-B31B1B.svg?style=flat-square" alt="Paper arXiv:2512.24601" /></a>
   <a href="https://github.com/fgm-builds/dashr"><img src="https://img.shields.io/badge/github-fgm--builds%2Fdashr-black.svg?style=flat-square&logo=github" alt="Repository" /></a>
+  <a href="https://github.com/fgm-builds/dashr/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License" /></a>
 </p>
 
 ---
