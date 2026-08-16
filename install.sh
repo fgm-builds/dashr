@@ -118,7 +118,7 @@ step "5/5 installing plugins into profile '$DSH_PROFILE' and localizing the pres
 "$DSH" plugin --profile "$DSH_PROFILE" add --config.auto-install-peers=false \
   "$TMP_ROOT/dsh-rlm-mode-"*.tgz
 
-PRESET_DIR="$DSH_HOME_DIR/.agent-presets/dashr"
+PRESET_DIR="$DSH_HOME_DIR/.agent-presets/rlm-mode"
 mkdir -p "$PRESET_DIR"
 # Bake in the machine-specific include target (the include row is a group
 # entry, so it cannot use an env expression) and the resolved kernel Python.
@@ -135,4 +135,4 @@ if pgrep -f "[d]sh .* --port\|[d]sh web" >/dev/null 2>&1 || systemctl --user is-
   step "  manual:   kill the dsh process, then relaunch with your usual flags"
 fi
 
-info "done. Create a new session with agent preset 'dashr' (DASHR) in the dsh web UI."
+info "done. Create a new session with agent preset 'rlm-mode' (RLM Mode) in the dsh web UI."

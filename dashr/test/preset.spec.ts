@@ -82,12 +82,12 @@ const STANDARD_PRESET_PATH = fileURLToPath(
 const PLACEHOLDER = 'DASHR_PLACEHOLDER_standard_preset_path_install_script_required'
 const SHIPPED_PRESET_ROOT = fileURLToPath(new URL('../preset', import.meta.url))
 const PRESET_ROOT = mkdtempSync(join(tmpdir(), 'dashr-preset-root-'))
-mkdirSync(join(PRESET_ROOT, 'dashr'), { recursive: true })
-copyFileSync(join(SHIPPED_PRESET_ROOT, 'dashr', 'agent.cordis.yml'), join(PRESET_ROOT, 'dashr', 'agent.cordis.yml'))
-copyFileSync(join(SHIPPED_PRESET_ROOT, 'dashr', 'preset.yml'), join(PRESET_ROOT, 'dashr', 'preset.yml'))
+mkdirSync(join(PRESET_ROOT, 'rlm-mode'), { recursive: true })
+copyFileSync(join(SHIPPED_PRESET_ROOT, 'rlm-mode', 'agent.cordis.yml'), join(PRESET_ROOT, 'rlm-mode', 'agent.cordis.yml'))
+copyFileSync(join(SHIPPED_PRESET_ROOT, 'rlm-mode', 'preset.yml'), join(PRESET_ROOT, 'rlm-mode', 'preset.yml'))
 writeFileSync(
-  join(PRESET_ROOT, 'dashr', 'agent.cordis.yml'),
-  readFileSync(join(PRESET_ROOT, 'dashr', 'agent.cordis.yml'), 'utf8').replace(PLACEHOLDER, STANDARD_PRESET_PATH),
+  join(PRESET_ROOT, 'rlm-mode', 'agent.cordis.yml'),
+  readFileSync(join(PRESET_ROOT, 'rlm-mode', 'agent.cordis.yml'), 'utf8').replace(PLACEHOLDER, STANDARD_PRESET_PATH),
 )
 const WORKDIR = mkdtempSync(join(tmpdir(), 'dashr-preset-'))
 process.env.DSH_CWD = WORKDIR
@@ -168,7 +168,7 @@ async function harness(extras: { ptcRuntime?: boolean } = {}): Promise<Context> 
     await ctx.plugin(WorkerThreadCodeRuntime, {})
   }
   await ctx.plugin(AgentPresets, {
-    default: 'dashr',
+    default: 'rlm-mode',
     roots: [{ path: PRESET_ROOT, trust: 'user' }],
     includeUserRoot: false,
   })
@@ -209,7 +209,7 @@ function kernelProcessCount(): number {
 async function agentOn(ctx: Context, id: string): Promise<Agent> {
   const handle = await ctx.agents.create({
     sessionId: SessionId(id),
-    setup: async (agentCtx: Context) => { void await ctx.agentPresets.mount(agentCtx, 'dashr') },
+    setup: async (agentCtx: Context) => { void await ctx.agentPresets.mount(agentCtx, 'rlm-mode') },
   })
   return handle.agent
 }
@@ -218,7 +218,7 @@ async function agentOn(ctx: Context, id: string): Promise<Agent> {
 async function agentHandleOn(ctx: Context, id: string): Promise<{ handle: { dispose(): Promise<void> }, agent: Agent }> {
   const handle = await ctx.agents.create({
     sessionId: SessionId(id),
-    setup: async (agentCtx: Context) => { void await ctx.agentPresets.mount(agentCtx, 'dashr') },
+    setup: async (agentCtx: Context) => { void await ctx.agentPresets.mount(agentCtx, 'rlm-mode') },
   })
   return { handle, agent: handle.agent }
 }
@@ -291,10 +291,10 @@ describe('the dashr preset roster', () => {
     const ctx = await harness()
     const listed = await ctx.agentPresets.list()
 
-    expect(listed.map(preset => preset.id)).toEqual(['dashr'])
+    expect(listed.map(preset => preset.id)).toEqual(['rlm-mode'])
     expect(listed[0]!.broken).toBeUndefined()
-    expect(listed[0]!.path).toBe(join(PRESET_ROOT, 'dashr', 'agent.cordis.yml'))
-    expect((await ctx.agentPresets.resolve('dashr')).id).toBe('dashr')
+    expect(listed[0]!.path).toBe(join(PRESET_ROOT, 'rlm-mode', 'agent.cordis.yml'))
+    expect((await ctx.agentPresets.resolve('rlm-mode')).id).toBe('rlm-mode')
   })
 
   it('mounts the real composition for two sessions and scopes the assembly to them', async () => {
@@ -438,7 +438,7 @@ describe('the dashr preset roster', () => {
     // composeFrom semantics — join, do not mount) and never run code.
     for (let i = 0; i < 3; i++) {
       const child = await ctx.agents.create({ sessionId: SessionId(`sess-lazy-child-${i}`) })
-      expect(ctx.agentPresets.composeFrom(child.agent.ctx, parent.ctx)).toBe('dashr')
+      expect(ctx.agentPresets.composeFrom(child.agent.ctx, parent.ctx)).toBe('rlm-mode')
     }
     // Any eager spawn would appear here; lazy keys hold nothing.
     await new Promise(resolve => setTimeout(resolve, 300))
@@ -466,7 +466,7 @@ describe('the dashr preset roster', () => {
     subagents.start = async (_name: string, request: { parent: Agent }) => {
       for (let i = 0; i < 3; i++) {
         const child = await ctx.agents.create({ sessionId: SessionId(`rlm-child-${++childIndex}`) })
-        expect(ctx.agentPresets.composeFrom(child.agent.ctx, request.parent.ctx)).toBe('dashr')
+        expect(ctx.agentPresets.composeFrom(child.agent.ctx, request.parent.ctx)).toBe('rlm-mode')
       }
       return {
         id: SessionId('rlm-stub-run'),
@@ -535,7 +535,7 @@ describe('kernel-per-session across per-agent mounts', () => {
     // realm is per-MOUNT, so kernel-per-session holds at this granularity
     // and, under the roster, needs provider-side Session/Agent keying.
     const ctx = await harness()
-    const preset = await ctx.agentPresets.resolve('dashr')
+    const preset = await ctx.agentPresets.resolve('rlm-mode')
     const create = async (id: string): Promise<Agent> => {
       const handle = await ctx.agents.create({ sessionId: SessionId(id) })
       await mountPreset(handle.agent.ctx, preset)

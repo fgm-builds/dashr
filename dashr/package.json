@@ -1,6 +1,6 @@
 {
   "name": "dsh-rlm-mode",
-  "description": "DASHR \u2014 the RLM mode for DeepSeek Harness: one persistent Python kernel per agent session, with schema-driven tools.* bindings, sub-agents, harness, and snapshots",
+  "description": "RLM Mode for DeepSeek Harness (dsh): one persistent Python kernel per agent session \u2014 schema-driven tools.* bindings, sub-agents, harness, and snapshots",
   "version": "0.1.0",
   "type": "module",
   "main": "lib/index.js",
@@ -91,5 +91,19 @@
     "tsdown": "^0.15.7",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fgm-builds/dashr.git"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "rlm",
+    "recursive-language-model",
+    "ipython",
+    "kernel",
+    "agent",
+    "plugin"
+  ]
 }

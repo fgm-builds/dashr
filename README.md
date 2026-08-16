@@ -32,7 +32,7 @@ DeepSeek Harness (`dsh`): Everything is a plugin (Cordis framework).
 Prime Agent: Context is variable (RLM paradigm).  
 **Why not both?** That's `dsh` in RLM mode — that's **Dashr**.
 
-**Dashr** is an open-source plugin for the [DeepSeek Harness (`dsh`)](https://github.com/deepseek-ai/deepseek-harness) agent runtime. It brings **RLM (Recursive Language Models)** and the **"Context is Variable"** paradigm to `dsh`, registering a dedicated `dashr` agent preset upon installation.
+**Dashr** is an open-source plugin for the [DeepSeek Harness (`dsh`)](https://github.com/deepseek-ai/deepseek-harness) agent runtime. It brings **RLM (Recursive Language Models)** and the **"Context is Variable"** paradigm to `dsh`, registering a dedicated `rlm-mode` agent preset upon installation.
 
 Instead of paying massive token costs on every round-trip tool call in standard multi-turn chat, Dashr equips the agent with a **stateful, persistent Python kernel**. The agent writes self-contained Python programs per cell, manipulating context, tools, and memory as native variables.
 
@@ -71,7 +71,7 @@ The core mechanism of **Recursive Language Models**:
 - 🔀 **In-Kernel Recursive Sub-Agents** — Call `rlm(task)` to spawn parallel sub-agents and `rlm_await(id)` to collect results inside Python code.
 - 🧠 **Dynamic Harness & Compaction** — Built-in `refine()` for operating memory and `compact()` for context reduction under pressure.
 - 💾 **State Snapshot & Revival** — Save and restore the kernel namespace across sessions.
-- 🔄 **Upstream-Proof Preset** — The `dashr` agent preset dynamically includes `dsh`'s standard composition, staying compatible whenever upstream `dsh` introduces new capabilities.
+- 🔄 **Upstream-Proof Preset** — The `rlm-mode` agent preset dynamically includes `dsh`'s standard composition, staying compatible whenever upstream `dsh` introduces new capabilities.
 
 ---
 

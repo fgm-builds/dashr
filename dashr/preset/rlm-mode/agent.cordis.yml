@@ -1,4 +1,4 @@
-# The `dashr` agent preset: DASHR's RLM mode — the standard coding agent,
+# The `rlm-mode` agent preset: DASHR's RLM mode — the standard coding agent,
 # presented through one persistent Python kernel.
 #
 # Stacking logic (2026-08-17, include-based): the first row includes the

@@ -1,5 +1,0 @@
-# Display metadata for the DASHR preset. The id is the directory name
-# (`dashr`) and the trust comes from the root it is discovered under —
-# neither is writable here; this file carries display text ONLY.
-name: DASHR
-description: The standard coding agent presented through one persistent Python kernel (run_cell transport) — the DASHR RLM runtime.

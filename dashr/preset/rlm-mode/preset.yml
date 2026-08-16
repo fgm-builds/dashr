@@ -1,0 +1,5 @@
+# Display metadata for the RLM Mode preset. The id is the directory name
+# (`rlm-mode`) and the trust comes from the root it is discovered under —
+# neither is writable here; this file carries display text ONLY.
+name: RLM Mode
+description: The standard coding agent presented through one persistent Python kernel (run_cell transport) — DASHR's RLM runtime.
