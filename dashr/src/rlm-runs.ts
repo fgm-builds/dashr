@@ -7,7 +7,7 @@
  * provider's unique parent-scoped ids, so one shared map is safe across the
  * sessions joined to a standing mount; teardown filters by the parent agent's
  * id recorded at admission.
- * @module dashr-plugin/rlm-runs
+ * @module dsh-rlm-mode/rlm-runs
  */
 
 import type { DASHRSubagentRun } from './subagents-surface.ts'

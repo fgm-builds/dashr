@@ -15,7 +15,7 @@
  * Drift control: `test/compat.spec.ts` statically asserts this surface is
  * exactly compatible with the vendored types — a contract change there
  * fails this package's typecheck.
- * @module dashr-plugin/runtime-surface
+ * @module dsh-rlm-mode/runtime-surface
  */
 
 /** One host-side function exposed to the program as an async callable; args and resolution must be lossless JSON. */

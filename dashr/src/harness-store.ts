@@ -16,7 +16,7 @@
  * never see each other's harness. `agent/disposed` drops the in-memory cache
  * only; the FILE survives by design — "continual" means the next session of
  * the same agent id restores its entries.
- * @module dashr-plugin/harness-store
+ * @module dsh-rlm-mode/harness-store
  */
 
 import { randomUUID } from 'node:crypto'

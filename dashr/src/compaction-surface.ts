@@ -15,7 +15,7 @@
  * and never leaks outward. The import being dynamic is what keeps the
  * dependency optional: a deployment that never sets `compactModel` never
  * loads the package.
- * @module dashr-plugin/compaction-surface
+ * @module dsh-rlm-mode/compaction-surface
  */
 
 import type { Agent } from '@deepseek-ai/dsh-agent'

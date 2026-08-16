@@ -1,4 +1,4 @@
-/** `dashr-plugin`: the DASHR RLM mode — one plugin, one row.
+/** `dsh-rlm-mode`: the DASHR RLM mode — one plugin, one row.
  *
  * This package merges what were two sibling plugins into a single
  * composition row: the stateful IPython kernel runtime (the `ctx.rlmRuntime`
@@ -43,7 +43,7 @@
  * hostage to the runtime service existing, and the `run_cell` execution
  * path re-reads `ctx.get('rlmRuntime')` with an actionable error,
  * mirroring upstream `requireCodeRuntime`.
- * @module dashr-plugin
+ * @module dsh-rlm-mode
  */
 
 
@@ -101,7 +101,7 @@ export type { RefineTarget } from './refine.ts'
 export type { DASHRCompactionResult, DASHRCompactionSurface, DASHRTokenMeterSurface } from './compaction-surface.ts'
 
 /** Cordis plugin name. */
-export const name = 'dashr-plugin'
+export const name = 'dsh-rlm-mode'
 
 /**
  * Required services. `rlmRuntime` is NOT listed: see the module doc — the
@@ -284,7 +284,7 @@ function parseRlmCall(rawArgs: unknown): RlmCallParse {
 export function resolveMaxParallelSubCalls(value: number | undefined): number {
   const maxParallelSubCalls = value ?? 10
   if (!Number.isInteger(maxParallelSubCalls) || maxParallelSubCalls < 1) {
-    throw new Error('dashr-plugin: maxParallelSubCalls must be a positive integer')
+    throw new Error('dsh-rlm-mode: maxParallelSubCalls must be a positive integer')
   }
   return maxParallelSubCalls
 }
@@ -301,7 +301,7 @@ export function resolveMaxParallelSubCalls(value: number | undefined): number {
 export function resolveSubagentModel(value: string | undefined): string | undefined {
   if (value === undefined) return undefined
   if (typeof value !== 'string' || value.length === 0) {
-    throw new Error(`dashr-plugin: subagentModel must be a non-empty string when set, got ${JSON.stringify(value)}`)
+    throw new Error(`dsh-rlm-mode: subagentModel must be a non-empty string when set, got ${JSON.stringify(value)}`)
   }
   return value
 }
@@ -314,7 +314,7 @@ export function resolveSubagentModel(value: string | undefined): string | undefi
 export function resolveHarnessDir(value: string | undefined): string | undefined {
   if (value === undefined) return undefined
   if (typeof value !== 'string' || value.length === 0) {
-    throw new Error(`dashr-plugin: harnessDir must be a non-empty string when set, got ${JSON.stringify(value)}`)
+    throw new Error(`dsh-rlm-mode: harnessDir must be a non-empty string when set, got ${JSON.stringify(value)}`)
   }
   return value
 }
@@ -323,7 +323,7 @@ export function resolveHarnessDir(value: string | undefined): string | undefined
 export function resolveRefineModel(value: string | undefined): string | undefined {
   if (value === undefined) return undefined
   if (typeof value !== 'string' || value.length === 0) {
-    throw new Error(`dashr-plugin: refineModel must be a non-empty string when set, got ${JSON.stringify(value)}`)
+    throw new Error(`dsh-rlm-mode: refineModel must be a non-empty string when set, got ${JSON.stringify(value)}`)
   }
   return value
 }
@@ -332,7 +332,7 @@ export function resolveRefineModel(value: string | undefined): string | undefine
 export function resolveCompactModel(value: string | undefined): string | undefined {
   if (value === undefined) return undefined
   if (typeof value !== 'string' || value.length === 0) {
-    throw new Error(`dashr-plugin: compactModel must be a non-empty string when set, got ${JSON.stringify(value)}`)
+    throw new Error(`dsh-rlm-mode: compactModel must be a non-empty string when set, got ${JSON.stringify(value)}`)
   }
   return value
 }
@@ -379,7 +379,7 @@ function renderJsonValue(value: Exclude<JsonValue, string>): string {
       tasks.push({ kind: 'text', text: compact ? ']' : `\n${JSON_INDENT.repeat(task.depth)}]` })
       for (let index = current.length - 1; index >= 0; index--) {
         const item = current[index]
-        if (item === undefined) throw new Error('dashr-plugin: cannot render a sparse JSON array')
+        if (item === undefined) throw new Error('dsh-rlm-mode: cannot render a sparse JSON array')
         tasks.push({ kind: 'value', value: item, depth: childDepth, compact })
         tasks.push({
           kind: 'text',
@@ -400,9 +400,9 @@ function renderJsonValue(value: Exclude<JsonValue, string>): string {
     tasks.push({ kind: 'text', text: compact ? '}' : `\n${JSON_INDENT.repeat(task.depth)}}` })
     for (let index = keys.length - 1; index >= 0; index--) {
       const key = keys[index]
-      if (key === undefined) throw new Error('dashr-plugin: cannot render a missing JSON object key')
+      if (key === undefined) throw new Error('dsh-rlm-mode: cannot render a missing JSON object key')
       const item = current[key]
-      if (item === undefined) throw new Error('dashr-plugin: cannot render an undefined JSON object property')
+      if (item === undefined) throw new Error('dsh-rlm-mode: cannot render an undefined JSON object property')
       tasks.push({ kind: 'value', value: item, depth: childDepth, compact })
       tasks.push({
         kind: 'text',
@@ -573,7 +573,7 @@ export function createRunCellTool(registry: ToolRuntime, options: RunCellBridgeO
     },
     async execute(args, exec): Promise<RunCellOutput> {
       if (args.description.trim().length === 0) {
-        throw new Error('dashr-plugin: invalid description: expected a non-empty string')
+        throw new Error('dsh-rlm-mode: invalid description: expected a non-empty string')
       }
       const runtime = requireRuntime()
 
@@ -1208,7 +1208,7 @@ export function apply(ctx: Context, config: Config): void {
   // presentation inject below resolves. Both halves were separate plugin rows
   // before the merge; one row now owns the whole lifecycle.
   ctx.plugin(IPythonCodeRuntime, pickRuntimeConfig(config))
-  const logger = ctx.logger('dashr-plugin')
+  const logger = ctx.logger('dsh-rlm-mode')
   const maxParallel = resolveMaxParallelSubCalls(config.maxParallelSubCalls)
   const subagentModel = resolveSubagentModel(config.subagentModel)
   const harnessDir = resolveHarnessDir(config.harnessDir)
@@ -1224,10 +1224,10 @@ export function apply(ctx: Context, config: Config): void {
       // sibling runtime package declares is deliberately not imported here.
       const runtime = runtimeCtx.get('rlmRuntime') as RlmRuntimeSurface | undefined
       if (!runtime) {
-        throw new Error('dashr-plugin: run_cell requires an rlmRuntime service — load a ctx.rlmRuntime implementation in this composition (dashr-plugin mounts one at apply)')
+        throw new Error('dsh-rlm-mode: run_cell requires an rlmRuntime service — load a ctx.rlmRuntime implementation in this composition (dsh-rlm-mode mounts one at apply)')
       }
       if (runtime.language !== 'python') {
-        throw new Error(`dashr-plugin: no cell SDK for runtime language ${JSON.stringify(runtime.language)} (dashr-plugin presents Python only; got a ${JSON.stringify(runtime.language)} runtime under ctx.rlmRuntime)`)
+        throw new Error(`dsh-rlm-mode: no cell SDK for runtime language ${JSON.stringify(runtime.language)} (dsh-rlm-mode presents Python only; got a ${JSON.stringify(runtime.language)} runtime under ctx.rlmRuntime)`)
       }
       return runtime
     }
@@ -1241,7 +1241,7 @@ export function apply(ctx: Context, config: Config): void {
     // this plugin's `inject = ['tools']` wait.
     const systemPrompt = runtimeCtx.get('systemPrompt')
     if (!systemPrompt) {
-      throw new Error('dashr-plugin: ctx.systemPrompt is required beside ctx.tools (the tools service itself depends on it) — this composition mounted tools without a system prompt registry')
+      throw new Error('dsh-rlm-mode: ctx.systemPrompt is required beside ctx.tools (the tools service itself depends on it) — this composition mounted tools without a system prompt registry')
     }
 
     // The consumer-side stand-in for the registry-private shapeDispatchLog
@@ -1257,7 +1257,7 @@ export function apply(ctx: Context, config: Config): void {
           () => Promise.resolve(dispatch.content),
         )
       } catch (error: unknown) {
-        logger.warn(`dashr-plugin: code-dispatch-log listener failed for ${dispatch.name}: ${error instanceof Error ? error.message : String(error)}; logging the original settled content`)
+        logger.warn(`dsh-rlm-mode: code-dispatch-log listener failed for ${dispatch.name}: ${error instanceof Error ? error.message : String(error)}; logging the original settled content`)
         return dispatch.content
       }
     }
@@ -1333,7 +1333,7 @@ export function apply(ctx: Context, config: Config): void {
             }
             return { engine, target: { provider, model } }
           } catch (error: unknown) {
-            return { error: `compactModel is set but the DASHR-scoped compaction engine could not be mounted: ${error instanceof Error ? error.message : String(error)} (is the optional peer @deepseek-ai/dsh-compaction-basic installed next to dashr-plugin?)` }
+            return { error: `compactModel is set but the DASHR-scoped compaction engine could not be mounted: ${error instanceof Error ? error.message : String(error)} (is the optional peer @deepseek-ai/dsh-compaction-basic installed next to dsh-rlm-mode?)` }
           }
         })()
         return mounted

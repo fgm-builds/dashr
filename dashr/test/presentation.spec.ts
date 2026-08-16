@@ -126,8 +126,8 @@ describe('config', () => {
   it('resolves the max-parallel cap with the same validation as upstream', () => {
     expect(resolveMaxParallelSubCalls(undefined)).toBe(10)
     expect(resolveMaxParallelSubCalls(1)).toBe(1)
-    expect(() => resolveMaxParallelSubCalls(0)).toThrow('dashr-plugin: maxParallelSubCalls must be a positive integer')
-    expect(() => resolveMaxParallelSubCalls(1.5)).toThrow('dashr-plugin: maxParallelSubCalls must be a positive integer')
+    expect(() => resolveMaxParallelSubCalls(0)).toThrow('dsh-rlm-mode: maxParallelSubCalls must be a positive integer')
+    expect(() => resolveMaxParallelSubCalls(1.5)).toThrow('dsh-rlm-mode: maxParallelSubCalls must be a positive integer')
   })
 
   it('mounts against a composition with no rlmRuntime by staying pending, not crashing the registry', async () => {

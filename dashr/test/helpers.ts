@@ -141,7 +141,7 @@ export function fakeAgent(): { agent: Agent; events: { type: string; data: unkno
 
 /**
  * Boot the same composition with the REAL kernel provider (M1's
- * `IPythonCodeRuntime` from `dashr-plugin`). One kernel boots
+ * `IPythonCodeRuntime` from `dsh-rlm-mode`). One kernel boots
  * per test; the fiber's registered disposer shuts it down
  * (`onTestFinished`), and the acceptance gate asserts no orphan
  * `ipykernel_launcher` processes remain (blueprint §10.9).

@@ -1,4 +1,4 @@
-# dashr-plugin
+# dsh-rlm-mode
 
 The DASHR plugin for the DeepSeek Harness — the RLM mode: a **stateful
 `ctx.rlmRuntime` provider** (one persistent IPython kernel subprocess **per
@@ -14,7 +14,7 @@ sharing one service instance never see each other's variables.
 This is M1 of DASHR: the provider half of the seam. The consumer half —
 the `run_cell` transport tool, the Python SDK renderer, and the presentation
 plugin that binds them to the dsh tool registry — lives in the sibling
-package `dashr-plugin` (`../dashr-presentation`). The provider
+package `dsh-rlm-mode` (`../dashr-presentation`). The provider
 registers the service key `rlmRuntime` through its own vendored Service
 Definition (see `src/vendored/rlm-runtime.ts`), so it carries **zero dsh
 runtime package dependencies**: only `@deepseek-ai/cordis` (peer),
@@ -22,7 +22,7 @@ runtime package dependencies**: only `@deepseek-ai/cordis` (peer),
 
 ## Package positioning
 
-- npm name: `dashr-plugin` (local `--patch` development;
+- npm name: `dsh-rlm-mode` (local `--patch` development;
   publish scope still open — blueprint §11 #4).
 - A standard Cordis plugin (`Context` + schemastery `Config`, every tunable
   configurable from `cordis.yml`, no hardcoded tunables).
@@ -43,7 +43,7 @@ runtime package dependencies**: only `@deepseek-ai/cordis` (peer),
 ## Install
 
 ```sh
-npm install dashr-plugin
+npm install dsh-rlm-mode
 ```
 
 The provider needs a Python interpreter with `ipykernel` (and `dill` for
@@ -159,7 +159,7 @@ blueprint §10.8/§10.9.)
 
 # Presentation half (run_cell transport, SDK, bindings, harness)
 
-# dashr-plugin
+# dsh-rlm-mode
 
 The DASHR agent-plane presentation row (blueprint §7.4): the plugin an agent
 preset carries to present the RLM runtime's tools to the model as **cells on a
@@ -169,7 +169,7 @@ Mounted in a preset's standing scope, it contributes:
 
 - **`run_cell`** — the only tool the model may call directly. One call = one
   cell on the persistent kernel (`ctx.rlmRuntime`, provided by the sibling
-  package `dashr-plugin`). Variables, imports, and definitions
+  package `dsh-rlm-mode`). Variables, imports, and definitions
   survive across calls. Nested tool calls ride the host registry's native
   scheduling pipeline (`await tools.name({...})` inside the cell; member
   bindings are positional, keyword arguments are rejected). Two BARE callable
@@ -188,11 +188,11 @@ Mounted in a preset's standing scope, it contributes:
 ## Install
 
 ```sh
-dsh plugin add dashr-plugin
+dsh plugin add dsh-rlm-mode
 ```
 
 That installs this package — and, through its peer chain, the
-`dashr-plugin` kernel provider — into the dsh profile. `--patch`
+`dsh-rlm-mode` kernel provider — into the dsh profile. `--patch`
 variants (`dsh plugin --patch ...` / a profile overlay) work the same way;
 the package is a plain npm install from the profile's perspective.
 
@@ -221,7 +221,7 @@ Two more setup facts:
    - id: agent-presets
      config:
        roots:
-         - path: <profile-dir>/node_modules/dashr-plugin/preset
+         - path: <profile-dir>/node_modules/dsh-rlm-mode/preset
            trust: system
    ```
 
@@ -244,7 +244,7 @@ AGENT-PLANE composition in the shape of the upstream `code` preset. Its rows:
 | --- | --- | --- |
 | `persona` | `@deepseek-ai/dsh-persona` | Same shape as `code`; describes the persistent-kernel mode. |
 | `agent-instructions` | `@deepseek-ai/dsh-agent-instructions` | Same as `code`. |
-| `dashr-kernel` (group, `isolate: { rlmRuntime: true }`) | `dashr-plugin` + `dashr-plugin` | The provider publishes `ctx.rlmRuntime` behind an entry-local realm; the presentation row sits INSIDE the group because realm-private services resolve only for rows sharing the realm. |
+| `dashr-kernel` (group, `isolate: { rlmRuntime: true }`) | `dsh-rlm-mode` + `dsh-rlm-mode` | The provider publishes `ctx.rlmRuntime` behind an entry-local realm; the presentation row sits INSIDE the group because realm-private services resolve only for rows sharing the realm. |
 | `filesystem` (group, `isolate: { fs: true }`) | `@deepseek-ai/dsh-fs-local` + `@deepseek-ai/dsh-tool-fs` | The `minimal` preset's bare-local pattern (the `code` preset instead uses the host's sandboxed `fs`). `read`/`write`/`edit` register on a bare host; `read_image` waits for an `attachments` service the host owns. |
 | `tool-todo` | `@deepseek-ai/dsh-tool-todo` | Registers into the registry's preset layer; also the binding-bridge material (`tools.todo_write(...)` inside a cell). |
 
@@ -306,7 +306,7 @@ same spec passes the real-run branch under a TS-capable Node 24.
 ## Composition
 
 ```ts
-import Presentation from 'dashr-plugin'
+import Presentation from 'dsh-rlm-mode'
 
 // Inside a preset's standing scope context:
 scope.ctx.plugin(Presentation, { maxParallelSubCalls: 10 })

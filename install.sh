@@ -2,7 +2,7 @@
 # DASHR one-click installer.
 #
 # Installs (or reuses) the DeepSeek Harness (dsh), installs the single
-# DASHR plugin package (`dashr-plugin`) into a dsh profile, localizes the
+# DASHR plugin package (`dsh-rlm-mode`) into a dsh profile, localizes the
 # `dashr` agent preset (include path + kernel Python baked in), and makes
 # sure the kernel Python environment has `ipykernel`.
 #
@@ -84,7 +84,7 @@ if [ -n "$DASHR_SRC" ]; then
   SRC="$DASHR_SRC"
   info "using local source: $SRC (skipping fetch)"
   if [ ! -d "$SRC/dashr/lib" ]; then
-    info "building dashr-plugin (lib/ missing)"
+    info "building dsh-rlm-mode (lib/ missing)"
     (cd "$SRC/dashr" && npm install --no-audit --no-fund >/dev/null && npm run build >/dev/null)
   fi
   (cd "$SRC/dashr" && npm pack --pack-destination "$TMP_ROOT" >/dev/null)
@@ -102,7 +102,7 @@ else
   mkdir -p "$TMP_ROOT/src"
   tar -xzf "$ARCHIVE" -C "$TMP_ROOT/src" --strip-components=1
   SRC="$TMP_ROOT/src"
-  info "building dashr-plugin"
+  info "building dsh-rlm-mode"
   (cd "$SRC/dashr" && npm install --no-audit --no-fund >/dev/null && npm run build >/dev/null)
   (cd "$SRC/dashr" && npm pack --pack-destination "$TMP_ROOT" >/dev/null)
 fi
@@ -113,7 +113,7 @@ step "5/5 installing plugins into profile '$DSH_PROFILE' and localizing the pres
 # @deepseek-ai/* peers through the harness install; letting pnpm auto-install
 # them would add a second (divergent) copy of cordis and friends.
 dsh plugin --profile "$DSH_PROFILE" add --config.auto-install-peers=false \
-  "$TMP_ROOT/dashr-plugin-"*.tgz
+  "$TMP_ROOT/dsh-rlm-mode-"*.tgz
 
 PRESET_DIR="$DSH_HOME_DIR/.agent-presets/dashr"
 mkdir -p "$PRESET_DIR"

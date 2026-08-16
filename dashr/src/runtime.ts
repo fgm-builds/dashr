@@ -21,7 +21,7 @@
  * blueprint §8.3), restore-on-first-boot, and the death→revive chain (§8.3
  * "kernel death 行为链") that respawns onto the nearest replayable snapshot
  * instead of M3-A's fresh-empty respawn.
- * @module dashr-plugin/runtime
+ * @module dsh-rlm-mode/runtime
  */
 
 import { randomBytes } from 'node:crypto'
@@ -191,22 +191,22 @@ export class IPythonCodeRuntime extends RLMRuntime {
     for (const key of ['startupTimeoutMs', 'runTimeoutMs', 'interruptGraceMs', 'disposeTimeoutMs', 'snapshotTimeoutMs'] as const) {
       const value = this.config[key]
       if (!(Number.isFinite(value) && value > 0)) {
-        throw new Error(`dashr-plugin: config.${key} must be a positive number, got ${String(value)}`)
+        throw new Error(`dsh-rlm-mode: config.${key} must be a positive number, got ${String(value)}`)
       }
     }
     // The SIGALRM escalation must fire strictly inside the force-settle grace,
     // or it would never get its chance to break a busy cell before the run
     // resolves.
     if (!(this.config.interruptConfirmMs > 0 && this.config.interruptConfirmMs < this.config.interruptGraceMs)) {
-      throw new Error(`dashr-plugin: config.interruptConfirmMs must be positive and below interruptGraceMs (${this.config.interruptGraceMs}), got ${String(this.config.interruptConfirmMs)}`)
+      throw new Error(`dsh-rlm-mode: config.interruptConfirmMs must be positive and below interruptGraceMs (${this.config.interruptGraceMs}), got ${String(this.config.interruptConfirmMs)}`)
     }
     if (!Number.isSafeInteger(this.config.maxOutputBytes) || this.config.maxOutputBytes < MIN_OUTPUT_BYTES) {
-      throw new Error(`dashr-plugin: config.maxOutputBytes must be a safe integer of at least ${MIN_OUTPUT_BYTES}, got ${String(this.config.maxOutputBytes)}`)
+      throw new Error(`dsh-rlm-mode: config.maxOutputBytes must be a safe integer of at least ${MIN_OUTPUT_BYTES}, got ${String(this.config.maxOutputBytes)}`)
     }
     if (!Number.isSafeInteger(this.config.snapshotSizeCapBytes) || this.config.snapshotSizeCapBytes < 1) {
-      throw new Error(`dashr-plugin: config.snapshotSizeCapBytes must be a positive safe integer, got ${String(this.config.snapshotSizeCapBytes)}`)
+      throw new Error(`dsh-rlm-mode: config.snapshotSizeCapBytes must be a positive safe integer, got ${String(this.config.snapshotSizeCapBytes)}`)
     }
-    this.logger = ctx.logger('dashr-plugin')
+    this.logger = ctx.logger('dsh-rlm-mode')
     ctx.effect(() => () => this.teardown(), 'ipython code-runtime teardown')
 
     // Session-end teardown, keyed: dsh's agent registry emits `agent/disposed`
@@ -251,7 +251,7 @@ export class IPythonCodeRuntime extends RLMRuntime {
    * @returns the run's outcome per the seam contract.
    */
   async run(request: CodeRunRequest): Promise<CodeRunResult> {
-    if (this.disposed) throw new Error('dashr-plugin: run() after disposal')
+    if (this.disposed) throw new Error('dsh-rlm-mode: run() after disposal')
     const bindings = this.validateBindings(request)
     if (request.signal?.aborted) {
       return { logs: [], error: { kind: 'abort', message: String(request.signal.reason) } }
@@ -398,18 +398,18 @@ export class IPythonCodeRuntime extends RLMRuntime {
     const bindings = new Map<string, CodeBindingNamespace>()
     for (const namespace of request.bindings) {
       if (!IDENTIFIER.test(namespace.global) || PORTABLE_RESERVED_WORDS.has(namespace.global)) {
-        throw new Error(`dashr-plugin: binding global ${JSON.stringify(namespace.global)} is not a usable identifier`)
+        throw new Error(`dsh-rlm-mode: binding global ${JSON.stringify(namespace.global)} is not a usable identifier`)
       }
       if (RESERVED_BINDING_GLOBALS.has(namespace.global) || KERNEL_OWNED_NAME.test(namespace.global)) {
-        throw new Error(`dashr-plugin: reserved binding global ${JSON.stringify(namespace.global)}`)
+        throw new Error(`dsh-rlm-mode: reserved binding global ${JSON.stringify(namespace.global)}`)
       }
       if (bindings.has(namespace.global)) {
-        throw new Error(`dashr-plugin: duplicate binding global ${JSON.stringify(namespace.global)}`)
+        throw new Error(`dsh-rlm-mode: duplicate binding global ${JSON.stringify(namespace.global)}`)
       }
       // A bare callable global dispatches exactly one host function; any other
       // count is a contract error (the kernel installer has no member to pick).
       if (namespace.callable === true && Object.keys(namespace.functions).length !== 1) {
-        throw new Error(`dashr-plugin: callable binding global ${JSON.stringify(namespace.global)} must declare exactly one function`)
+        throw new Error(`dsh-rlm-mode: callable binding global ${JSON.stringify(namespace.global)} must declare exactly one function`)
       }
       bindings.set(namespace.global, namespace)
     }
@@ -419,17 +419,17 @@ export class IPythonCodeRuntime extends RLMRuntime {
       const descriptor = namespace.errorClass
       if (!descriptor) continue
       if (!IDENTIFIER.test(descriptor.name) || PORTABLE_RESERVED_WORDS.has(descriptor.name)) {
-        throw new Error(`dashr-plugin: binding error class ${JSON.stringify(descriptor.name)} is not a usable identifier`)
+        throw new Error(`dsh-rlm-mode: binding error class ${JSON.stringify(descriptor.name)} is not a usable identifier`)
       }
       if (RESERVED_BINDING_GLOBALS.has(descriptor.name) || KERNEL_OWNED_NAME.test(descriptor.name)) {
-        throw new Error(`dashr-plugin: reserved binding global ${JSON.stringify(descriptor.name)}`)
+        throw new Error(`dsh-rlm-mode: reserved binding global ${JSON.stringify(descriptor.name)}`)
       }
       if (bindings.has(descriptor.name) || errorClassNames.has(descriptor.name)) {
-        throw new Error(`dashr-plugin: duplicate injected global ${JSON.stringify(descriptor.name)}`)
+        throw new Error(`dsh-rlm-mode: duplicate injected global ${JSON.stringify(descriptor.name)}`)
       }
       const member = descriptor.memberNameProperty
       if (member.length === 0 || RESERVED_ERROR_MEMBERS.has(member) || DUNDER_MEMBER.test(member)) {
-        throw new Error(`dashr-plugin: binding error member property ${JSON.stringify(descriptor.memberNameProperty)} is not usable`)
+        throw new Error(`dsh-rlm-mode: binding error member property ${JSON.stringify(descriptor.memberNameProperty)} is not usable`)
       }
       errorClassNames.add(descriptor.name)
     }

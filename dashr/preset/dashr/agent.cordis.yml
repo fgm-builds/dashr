@@ -13,7 +13,7 @@
 # is machine-specific). It cannot be a `!!js` env expression: group rows
 # (the include row is an EntryGroup) skip loader interpolation.
 #
-# The dashr-kernel group is ONE row: `dashr-plugin`, which mounts the
+# The dashr-kernel group is ONE row: `dsh-rlm-mode`, which mounts the
 # stateful kernel provider (published as `ctx.rlmRuntime`) and the run_cell
 # transport in that order — the model writes one Python program against the
 # generated SDK and one `run_cell` call executes
@@ -74,7 +74,7 @@
   isolate:
     rlmRuntime: true
   config:
-    - id: dashr-plugin
-      name: dashr-plugin
+    - id: dsh-rlm-mode
+      name: dsh-rlm-mode
       config:
         python: !!js process.env.DASHR_KERNEL_PYTHON ?? 'python3'

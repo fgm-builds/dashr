@@ -8,7 +8,7 @@
  * The composition resolves its rows as BARE specifiers from the HOST
  * composition's baseUrl (the roster's loader sends package names to the
  * recorded host base, never to the preset directory), so `ctx.baseUrl` points
- * inside this package: `dashr-plugin` resolves by package
+ * inside this package: `dsh-rlm-mode` resolves by package
  * self-reference and the `@deepseek-ai/dsh-*`
  * rows through `node_modules`. That resolution is Node's own ESM loader
  * (`cordis-plugin-loader`'s internal loader, which needs
