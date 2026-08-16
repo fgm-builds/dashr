@@ -82,7 +82,7 @@ model, not like a sandboxed runner.
 One-liner (installs dsh if missing, then DASHR):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mark1kwok/dashr/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/fgm-builds/dashr/main/install.sh | bash
 ```
 
 What it does:
