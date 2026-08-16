@@ -29,26 +29,26 @@ import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 export const RLM_PROVIDER = 'spawn'
 
 /** Why a subagent run ended (the known cases; unknown variants pass through as strings). */
-export type DasherSubagentStopReason = 'completed' | 'aborted' | 'error' | 'max-tokens' | 'refusal' | (string & {})
+export type DASHRSubagentStopReason = 'completed' | 'aborted' | 'error' | 'max-tokens' | 'refusal' | (string & {})
 
 /** The terminal outcome of one subagent run. */
-export interface DasherSubagentResult {
+export interface DASHRSubagentResult {
   /** The child's final assistant content. */
   output: ContentBlock[]
   /** A provider-validated structured capture, when an output schema was requested. */
   structured?: unknown
   /** Why the run ended. */
-  stopReason: DasherSubagentStopReason
+  stopReason: DASHRSubagentStopReason
 }
 
 /** A published one-shot subagent run handle. */
-export interface DasherSubagentRun {
+export interface DASHRSubagentRun {
   /** Parent-scoped run id (the in-process backend's child session id). */
   id: string
   /** The exact published in-process child, when local. */
   localAgent: Agent | undefined
   /** Settles with the terminal result; rejects only on an infrastructure fault. */
-  result: Promise<DasherSubagentResult>
+  result: Promise<DASHRSubagentResult>
   /** Cancel remaining work and release resources (idempotent). */
   dispose(): Promise<void>
 }
@@ -60,13 +60,13 @@ export interface DasherSubagentRun {
  * standing rule is to type only what the bridge constructs, and widening
  * this would grow the rlm() binding's contract past what DASHR offers.
  */
-export interface DasherSubagentAgentOptions {
+export interface DASHRSubagentAgentOptions {
   /** Model id the child's own requests use, shadowing the parent's route. */
   model?: string
 }
 
 /** The subset of `SubagentStartRequest` the rlm() bridge constructs. */
-export interface DasherSubagentStartRequest {
+export interface DASHRSubagentStartRequest {
   label?: string
   prompt: ContentBlock[]
   parent: Agent
@@ -78,12 +78,12 @@ export interface DasherSubagentStartRequest {
    * `...requested`, so an omitted `agentOptions` leaves the child on the
    * parent's own route without this side assuming what that route is.
    */
-  agentOptions?: DasherSubagentAgentOptions
+  agentOptions?: DASHRSubagentAgentOptions
 }
 
 /** The `ctx.subagents` service surface the rlm() bridge calls. */
-export interface DasherSubagentsSurface {
-  start(name: string, request: DasherSubagentStartRequest): Promise<DasherSubagentRun>
+export interface DASHRSubagentsSurface {
+  start(name: string, request: DASHRSubagentStartRequest): Promise<DASHRSubagentRun>
 }
 
 /**

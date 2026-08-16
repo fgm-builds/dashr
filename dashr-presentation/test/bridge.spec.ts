@@ -321,7 +321,7 @@ describe('the run_cell dispatch bridge (result shaping)', () => {
     const result = await runCell(ctx, 'program', { agent: agent.agent })
     expect(result.isError).toBe(true)
     if (!result.isError) throw new Error('expected failure')
-    expect(result.error.info).toMatchObject({ name: 'DasherRunFailedError', code: 'CODE_RUN_FAILED' })
+    expect(result.error.info).toMatchObject({ name: 'DASHRRunFailedError', code: 'CODE_RUN_FAILED' })
     expect((result.content[0] as { text: string }).text).toContain('code run failed (exception): boom')
     expect((result.content[0] as { text: string }).text).toContain('Captured output:\npartial output')
   })
@@ -438,8 +438,8 @@ describe('the run_cell dispatch bridge (result shaping)', () => {
     const result = await runCell(ctx, 'program', { agent: agent.agent })
     expect(result.isError).toBe(false)
     // The identity a stateful backend keys its kernel by: the calling
-    // agent's id (the harness fake carries SessionId('dasher-agent')).
-    expect(runtime.lastRequest?.principal).toBe('dasher-agent')
+    // agent's id (the harness fake carries SessionId('dashr-agent')).
+    expect(runtime.lastRequest?.principal).toBe('dashr-agent')
   })
 
   it('omits the principal for an agentless run_cell call (the runtime\'s shared default key)', async () => {

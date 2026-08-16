@@ -1,6 +1,6 @@
 /**
  * The Continual Harness store (M4-B, blueprint §6): per-agent durable prompt
- * state — notes, memories, skills — that the `dasher:harness` system-prompt
+ * state — notes, memories, skills — that the `dashr:harness` system-prompt
  * section re-renders at EVERY assembly (prompt-as-variable), so a refine()
  * that lands mid-session is visible to the very next model request without
  * any restart. Storage is one JSON file per agent under the configured
@@ -226,7 +226,7 @@ export class HarnessStore {
 }
 
 /**
- * Render the `dasher:harness` section text for one agent's entries. Empty
+ * Render the `dashr:harness` section text for one agent's entries. Empty
  * input renders the empty string — `renderPrompt` drops empty sections, so an
  * empty harness contributes nothing (chosen over skipping registration: the
  * section is a standing capability, and absence-of-section vs empty-section

@@ -178,7 +178,7 @@ describe('rlm() / rlm_await() binding', () => {
     await cell(ctx, agent.agent, 'program')
 
     // The same untyped event the runtime provider listens for.
-    ctx.events.emit('agent/disposed', { agent: { id: 'dasher-agent' } })
+    ctx.events.emit('agent/disposed', { agent: { id: 'dashr-agent' } })
     await new Promise(resolve => setTimeout(resolve, 50))
     expect(disposed).toEqual(['stub-dispose'])
   })
@@ -330,7 +330,7 @@ describe('rlm_await cancellation chain (real kernel, M4-A N2)', () => {
     // The chain (outer signal → run-scoped abort → kernel interrupt ladder)
     // must settle the cell as the CODE_RUN_FAILED abort taxonomy, quickly —
     // a broken chain would ride the full run timeout instead.
-    expect(blocked.error.info).toMatchObject({ name: 'DasherRunFailedError', code: 'CODE_RUN_FAILED' })
+    expect(blocked.error.info).toMatchObject({ name: 'DASHRRunFailedError', code: 'CODE_RUN_FAILED' })
     expect((blocked.content[0] as { text: string }).text).toContain('code run failed (abort)')
     expect(elapsedMs).toBeLessThan(10_000)
 
@@ -340,7 +340,7 @@ describe('rlm_await cancellation chain (real kernel, M4-A N2)', () => {
 
     // The aborted rlm_await did NOT take the run's result, so the run
     // stays tracked and the session-disposal path still reaches it.
-    ctx.events.emit('agent/disposed', { agent: { id: 'dasher-agent' } })
+    ctx.events.emit('agent/disposed', { agent: { id: 'dashr-agent' } })
     await new Promise(resolve => setTimeout(resolve, 50))
     expect(disposed).toEqual(['stub-hanging'])
   }, 30_000)

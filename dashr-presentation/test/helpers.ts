@@ -91,7 +91,7 @@ export async function setup(
   await ctx.plugin(Object.assign((inner: Context) => { host = inner }, { inject: ['tools', 'systemPrompt'] }))
 
   // The "preset": a standing scope whose ctx mounts the presentation row.
-  const presetKey = { preset: 'dasher' }
+  const presetKey = { preset: 'dashr' }
   const preset = createScope(host, presetKey)
   onTestFinished(() => preset.dispose())
   const fiber = await preset.ctx.plugin(Presentation, config)
@@ -101,20 +101,20 @@ export async function setup(
   // captures appends — the audit assertions read `events`), one neighbor
   // without the row.
   const events: { type: string; data: unknown }[] = []
-  const dasherAgent = {
-    id: SessionId('dasher-agent'),
+  const dashrAgent = {
+    id: SessionId('dashr-agent'),
     ...agentRoute === undefined ? {} : { options: agentRoute },
     session: {
       header: { cwd: '/workspace' },
       append: (type: string, data: unknown) => { events.push({ type, data }) },
     },
   } as unknown as Agent
-  const agentScope = createScope(preset.ctx, dasherAgent, { parent: presetKey })
+  const agentScope = createScope(preset.ctx, dashrAgent, { parent: presetKey })
   onTestFinished(() => agentScope.dispose())
   const otherAgent = { id: SessionId('ptc-agent') } as Agent
   const otherScope = createScope(host, otherAgent)
   onTestFinished(() => otherScope.dispose())
-  return { ctx, preset, agent: { scope: agentScope, agent: dasherAgent, events }, other: { scope: otherScope, agent: otherAgent } }
+  return { ctx, preset, agent: { scope: agentScope, agent: dashrAgent, events }, other: { scope: otherScope, agent: otherAgent } }
 }
 
 /** A structural fake of the owning agent: captures session appends. */

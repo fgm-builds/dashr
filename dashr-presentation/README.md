@@ -14,7 +14,7 @@ Mounted in a preset's standing scope, it contributes:
   bindings are positional, keyword arguments are rejected). Two BARE callable
   globals are also installed per cell: `await rlm(prompt, label=None)` and
   `await rlm_await(run_id)` (see "rlm() subagent binding").
-- **`tools:dasher-sdk`** — a generated Python SDK prompt section: one named
+- **`tools:dashr-sdk`** — a generated Python SDK prompt section: one named
   `TypedDict` per tool argument/output object, one awaitable method per
   visible tool on a `Tools` protocol, and the cell contract (persistent
   namespace, completion-value rules, `ToolCallError`, sub-call concurrency).
@@ -49,14 +49,14 @@ Two more setup facts:
 
 2. **Preset root.** A preset is a directory holding `agent.cordis.yml`; the
    roster (`@deepseek-ai/dsh-agent-presets`) only scans its configured
-   `roots`. This package ships the preset at `preset/dasher/`, so expose it
+   `roots`. This package ships the preset at `preset/dashr/`, so expose it
    to the roster by adding that directory as a root — the same mechanism the
    CLI uses for its own shipped set (`apps/cli/src/profile-boot.ts` pins
    `config/agent-presets/` with `trust: system` via a boot overlay). With a
    `--patch` overlay (or the profile's `cordis.patch.yml`):
 
    ```yaml
-   # dasher-preset-root.yml — passed as `--patch dasher-preset-root.yml`
+   # dashr-preset-root.yml — passed as `--patch dashr-preset-root.yml`
    - id: agent-presets
      config:
        roots:
@@ -71,19 +71,19 @@ Two more setup facts:
    (`<dshHome>/.agent-presets`) unless `includeUserRoot: false`.
 
 Once the root is configured, the preset appears in the roster and can be
-picked for a session (`dasher`), copied for local authoring, or set as the
+picked for a session (`dashr`), copied for local authoring, or set as the
 `agent-presets` default.
 
-## The `dasher` preset
+## The `dashr` preset
 
-`preset/dasher/agent.cordis.yml` (display metadata in `preset.yml`) is an
+`preset/dashr/agent.cordis.yml` (display metadata in `preset.yml`) is an
 AGENT-PLANE composition in the shape of the upstream `code` preset. Its rows:
 
 | Row | Package | Notes |
 | --- | --- | --- |
 | `persona` | `@deepseek-ai/dsh-persona` | Same shape as `code`; describes the persistent-kernel mode. |
 | `agent-instructions` | `@deepseek-ai/dsh-agent-instructions` | Same as `code`. |
-| `dasher-kernel` (group, `isolate: { rlmRuntime: true }`) | `dashr-code-runtime-ipython` + `dashr-tool-presentation` | The provider publishes `ctx.rlmRuntime` behind an entry-local realm; the presentation row sits INSIDE the group because realm-private services resolve only for rows sharing the realm. |
+| `dashr-kernel` (group, `isolate: { rlmRuntime: true }`) | `dashr-code-runtime-ipython` + `dashr-tool-presentation` | The provider publishes `ctx.rlmRuntime` behind an entry-local realm; the presentation row sits INSIDE the group because realm-private services resolve only for rows sharing the realm. |
 | `filesystem` (group, `isolate: { fs: true }`) | `@deepseek-ai/dsh-fs-local` + `@deepseek-ai/dsh-tool-fs` | The `minimal` preset's bare-local pattern (the `code` preset instead uses the host's sandboxed `fs`). `read`/`write`/`edit` register on a bare host; `read_image` waits for an `attachments` service the host owns. |
 | `tool-todo` | `@deepseek-ai/dsh-tool-todo` | Registers into the registry's preset layer; also the binding-bridge material (`tools.todo_write(...)` inside a cell). |
 
@@ -95,7 +95,7 @@ Deliberately absent, with reasons (the upstream `code` preset carries them):
 - `dsh-tool-fs-search` — its ripgrep/subprocess/spill stack is host-plane
   weight with a native dependency; kernel-side Python covers search.
 - The jobs/skills/goals/plan/compaction/delegation sections — each either
-  owns host-plane singletons or adds host services; a Dasher deployment
+  owns host-plane singletons or adds host services; a DASHR deployment
   composes them on the host when wanted.
 
 The provider row's config carries only the tunables worth overriding from a
@@ -108,7 +108,7 @@ sibling package's README for the full table.
 An entry-local realm (`isolate: { rlmRuntime: true }`) is **one instance per
 mounted composition**, not per session. The roster mounts a preset ONCE per
 process under a standing scope and every session joins it, so under the
-roster **all `dasher` sessions share one provider instance**. That is the
+roster **all `dashr` sessions share one provider instance**. That is the
 upstream roster's documented model ("its plugins key their state by
 Session/Agent, so sessions stay apart inside one shared instance") — and
 since M3-A the provider honors exactly that: it keys **one kernel per
@@ -132,9 +132,9 @@ PTC Code-Mode session in the same process still resolves the host's
 `run_cell` is our own transport name (the registry reserves `run_code`), so a
 Code-Mode preset (`@deepseek-ai/dsh-agent-tool-presentation` with
 `mode: code` over the host-plane worker-thread `codeRuntime`) composes beside
-the `dasher` preset in one process: the PTC agent's assembly shows `run_code`
-plus the TS `tools:sdk` section, the dasher agent's shows `run_cell` plus the
-Python `tools:dasher-sdk`, and neither execution path touches the other's
+the `dashr` preset in one process: the PTC agent's assembly shows `run_code`
+plus the TS `tools:sdk` section, the dashr agent's shows `run_cell` plus the
+Python `tools:dashr-sdk`, and neither execution path touches the other's
 runtime. One environmental caveat: the worker-thread provider strips
 TypeScript in-process, so a Node build without TS support
 (`process.features.typescript === false`, e.g. this dev box's v22 binary)
@@ -190,7 +190,7 @@ and every unsettled run owned by a session is disposed on that session's
 `agent/disposed` (and all of them on composition teardown).
 
 Realm boundary: `ctx.subagents` is a HOST-PLANE root-realm singleton (the
-`dasher` preset deliberately does not carry the subagent rows), while this row
+`dashr` preset deliberately does not carry the subagent rows), while this row
 sits inside the preset's `isolate: { rlmRuntime: true }` realm. Cordis resolves
 outer-realm services for names the inner realm does NOT isolate, so this row
 reaches `ctx.subagents` outward through `ctx.get('subagents')` while the
@@ -202,7 +202,7 @@ see `ctx.subagents`, the parent `Agent` on `exec.agent`, and the abort signal).
 
 The Continual Harness is per-agent DURABLE PROMPT STATE — notes, memories, and
 skills carried into every future system prompt of the same agent id. It is
-prompt-as-variable: the `dasher:harness` prompt section (order 200, the first
+prompt-as-variable: the `dashr:harness` prompt section (order 200, the first
 slot after the 100–199 tool-guidance band) re-renders from the CURRENT store at
 EVERY assembly, so a refine() that lands mid-turn is visible to the very next
 model request with no restart. An empty harness renders an empty section

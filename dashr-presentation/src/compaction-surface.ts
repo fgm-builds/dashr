@@ -3,7 +3,7 @@
  * binding consumes them — STRUCTURAL MIRRORS (the same standing rule as
  * `subagents-surface.ts`): `@deepseek-ai/dsh-compaction` is deliberately NOT
  * a dependency of this package. The host-plane engine (typically
- * `dsh-compaction-basic`, a deployment choice the Dasher preset documents as
+ * `dsh-compaction-basic`, a deployment choice the DASHR preset documents as
  * host-owned) is read with the untyped `ctx.get('compaction')` escape hatch,
  * and only the operations the binding actually calls are typed here.
  *
@@ -21,7 +21,7 @@
 import type { Agent } from '@deepseek-ai/dsh-agent'
 
 /** The compaction vocabulary the binding reports back to the cell (mirrored subset of `CompactionResult`). */
-export interface DasherCompactionResult {
+export interface DASHRCompactionResult {
   /** Stable identity of the compaction transaction. */
   compactionId: string | number
   /** The seq of the appended `compaction/summary` event. */
@@ -38,17 +38,17 @@ export interface DasherCompactionResult {
  * idle-maintenance gate. The live `Agent` from `exec.agent` satisfies this
  * structurally and is what we pass through unchanged.
  */
-export type DasherCompactionAgent = Agent
+export type DASHRCompactionAgent = Agent
 
 /** The `ctx.compaction` surface the compact() binding calls. */
-export interface DasherCompactionSurface {
+export interface DASHRCompactionSurface {
   /**
    * Explicit idle-session compaction (the human `/compact` entry). Throws a
    * `ManualCompactionError`-shaped error (`code: 'busy' | 'cancelled' | ...`)
    * — notably `busy` whenever the agent has active work, which is ALWAYS the
    * case for an in-cell call (the cell runs inside a live agent turn).
    */
-  compactNow(agent: DasherCompactionAgent, signal: AbortSignal, sourceCommandId?: unknown): Promise<DasherCompactionResult | null>
+  compactNow(agent: DASHRCompactionAgent, signal: AbortSignal, sourceCommandId?: unknown): Promise<DASHRCompactionResult | null>
   /**
    * Policy-governed pressure compaction — the between-steps automatic entry.
    * Needs no idle gate, which is what makes it the effective in-cell path:
@@ -56,11 +56,11 @@ export interface DasherCompactionSurface {
    * range is summarized and shadowed now, so the model's NEXT request in the
    * same turn already rides the compacted history.
    */
-  compactIfNeeded(agent: DasherCompactionAgent, trigger: 'pressure' | 'context-overflow', signal: AbortSignal): Promise<DasherCompactionResult | null>
+  compactIfNeeded(agent: DASHRCompactionAgent, trigger: 'pressure' | 'context-overflow', signal: AbortSignal): Promise<DASHRCompactionResult | null>
 }
 
 /** The `ctx.tokenMeter` surface the usage probe reads (optional host singleton). */
-export interface DasherTokenMeterSurface {
+export interface DASHRTokenMeterSurface {
   /** Replay-fold measurement of the session's current pressure. */
   measure(session: unknown): { totalTokens: number }
 }

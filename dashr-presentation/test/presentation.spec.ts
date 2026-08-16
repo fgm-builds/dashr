@@ -36,13 +36,13 @@ async function modelDirect(ctx: Context, name: string, agent: Agent, arguments_:
   })
 }
 
-describe('assembly — the Dasher row collapses its scope, and only its scope', () => {
+describe('assembly — the DASHR row collapses its scope, and only its scope', () => {
   it('a preset-scope mount leaves run_cell the only contributed tool and ships the SDK section', async () => {
     const { ctx, agent } = await setup(fakeRuntime)
     registerEcho(ctx)
     const assembly = await ctx.systemPrompt.assemble({ scope: agent.agent })
     expect(assembly.tools.map(tool => tool.name)).toEqual(['run_cell'])
-    const sdk = assembly.sections.find(section => section.name === 'tools:dasher-sdk')
+    const sdk = assembly.sections.find(section => section.name === 'tools:dashr-sdk')
     expect(sdk).toBeDefined()
     expect(sdk?.text).toContain('## Writing cells for run_cell')
     expect(sdk?.text).toContain('async def echo(self, args: EchoArgs) -> str')
@@ -54,7 +54,7 @@ describe('assembly — the Dasher row collapses its scope, and only its scope', 
     registerEcho(ctx)
     const neighbor = await ctx.systemPrompt.assemble({ scope: other.agent })
     expect(neighbor.tools.map(tool => tool.name)).toEqual(['echo'])
-    expect(neighbor.sections.some(section => section.name === 'tools:dasher-sdk')).toBe(false)
+    expect(neighbor.sections.some(section => section.name === 'tools:dashr-sdk')).toBe(false)
     // And the joining agent's own view of the registry still names every
     // tool — the collapse lives in the assembly, not in dispatch visibility.
     expect(ctx.tools.schemas(other.agent).map(tool => tool.name)).toEqual(['echo'])
@@ -66,7 +66,7 @@ describe('assembly — the Dasher row collapses its scope, and only its scope', 
     registerEcho(ctx)
     const assembly = await ctx.systemPrompt.assemble()
     expect(assembly.tools.map(tool => tool.name)).toEqual(['echo'])
-    expect(assembly.sections.some(section => section.name === 'tools:dasher-sdk')).toBe(false)
+    expect(assembly.sections.some(section => section.name === 'tools:dashr-sdk')).toBe(false)
   })
 
   it('the SDK section regenerates from the calling scope: a restricted agent loses the tool from its SDK', async () => {
@@ -82,7 +82,7 @@ describe('assembly — the Dasher row collapses its scope, and only its scope', 
     // The joined agent restricts the GLOBAL `secret` tool away for itself.
     agent.scope.ctx.tools.restrict({ deny: ['secret'] })
     const assembly = await ctx.systemPrompt.assemble({ scope: agent.agent })
-    const sdk = assembly.sections.find(section => section.name === 'tools:dasher-sdk')
+    const sdk = assembly.sections.find(section => section.name === 'tools:dashr-sdk')
     expect(sdk?.text).toContain('async def echo(')
     expect(sdk?.text).not.toContain('secret')
   })

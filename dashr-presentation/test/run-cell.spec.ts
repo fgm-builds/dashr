@@ -140,7 +140,7 @@ describe('run_cell end-to-end on a real kernel', () => {
     const result = await runCell(ctx, 'await tools.boom({})', { agent: agent.agent })
     expect(result.isError).toBe(true)
     if (!result.isError) throw new Error('expected failure')
-    expect(result.error.info).toMatchObject({ name: 'DasherRunFailedError', code: 'CODE_RUN_FAILED' })
+    expect(result.error.info).toMatchObject({ name: 'DASHRRunFailedError', code: 'CODE_RUN_FAILED' })
     expect((result.content[0] as { text: string }).text).toContain('code run failed (exception)')
     expect((result.content[0] as { text: string }).text).toContain('the tool exploded')
   })
@@ -196,7 +196,7 @@ describe('run_cell end-to-end on a real kernel', () => {
     expect(result.isError).toBe(true)
     if (!result.isError) throw new Error('expected abort failure')
     // The cell's own failure rides the CODE_RUN_FAILED taxonomy (abort kind)…
-    expect(result.error.info).toMatchObject({ name: 'DasherRunFailedError', code: 'CODE_RUN_FAILED' })
+    expect(result.error.info).toMatchObject({ name: 'DASHRRunFailedError', code: 'CODE_RUN_FAILED' })
     expect((result.content[0] as { text: string }).text).toContain('code run failed (abort)')
     // …and the kernel stays usable afterwards.
     const after = await runCell(ctx, 'return "still-alive"', { agent: agent.agent })

@@ -1,5 +1,5 @@
 /**
- * `dashr-tool-presentation`: the Dasher RLM agent-plane presentation row
+ * `dashr-tool-presentation`: the DASHR RLM agent-plane presentation row
  * (blueprint §7.4) — the `run_cell` transport tool, the generated Python SDK
  * prompt section, the model-direct-call collapse, and the tool→binding bridge
  * that lets a cell call the registry's agent-visible tools as
@@ -8,14 +8,14 @@
  * Structure mirrors upstream `dsh-agent-tool-presentation` + the Code Mode
  * half of `dsh-tools` (0.1.0-rc.6), re-pointed at our own `ctx.rlmRuntime`
  * Service Definition (vendored in `dashr-code-runtime-ipython`): the host
- * registry stays untouched, and this row composes per scope — a Dasher preset
+ * registry stays untouched, and this row composes per scope — a DASHR preset
  * mounts it in its standing scope, so every agent joined under that preset
  * gets the cell surface while PTC / native presets in the SAME process keep
  * their own presentation. One row per composition, not one per session.
  *
  * Deliberate deltas from upstream Code Mode, recorded per blueprint §7.6:
  * - `run_cell` (not `run_code`): the registry reserves `run_code`
- *   unconditionally, and a distinct name is what lets a Dasher preset and a
+ *   unconditionally, and a distinct name is what lets a DASHR preset and a
  *   PTC code preset share one process registry without collision.
  * - The transport is an ORDINARY scoped registration, not the registry's
  *   reserved non-filterable transport: reservation is registry-private
@@ -35,7 +35,7 @@
  * service existing, while a deployment may legitimately mount this plugin
  * into a scope whose runtime row comes from an `isolate` realm later in the
  * mount sequence. The wait (`ctx.inject(['rlmRuntime'], …)`) is still
- * declared so a Dasher preset against a runtime-less deployment fails AT
+ * declared so a DASHR preset against a runtime-less deployment fails AT
  * MOUNT — named in the preset's activation audit — instead of at the first
  * prompt; the `run_cell` execution path re-reads `ctx.get('rlmRuntime')`
  * with an actionable error, mirroring upstream `requireCodeRuntime`.
@@ -73,17 +73,17 @@ import type {
   RlmRuntimeSurface,
 } from './runtime-surface.ts'
 import { renderToolsSdkPy } from './py-sdk.ts'
-import type { DasherSdkSchema } from './py-sdk.ts'
+import type { DASHRSdkSchema } from './py-sdk.ts'
 import { snapshotJsonValue } from './snapshot-json.ts'
 import type { JsonValue } from './snapshot-json.ts'
 import { RLM_PROVIDER, extractTextFromBlocks } from './subagents-surface.ts'
-import type { DasherSubagentsSurface } from './subagents-surface.ts'
+import type { DASHRSubagentsSurface } from './subagents-surface.ts'
 import { RlmRunRegistry } from './rlm-runs.ts'
 import { HarnessStore, renderHarnessSection } from './harness-store.ts'
 import type { HarnessApplyReport, HarnessOp } from './harness-store.ts'
 import { REFINE_MAX_TOKENS, REFINE_SYSTEM, buildRefineMessages, parseRefineAnswer, resolveRefineTarget } from './refine.ts'
 import type { RefineTarget } from './refine.ts'
-import type { DasherCompactionResult, DasherCompactionSurface, DasherTokenMeterSurface } from './compaction-surface.ts'
+import type { DASHRCompactionResult, DASHRCompactionSurface, DASHRTokenMeterSurface } from './compaction-surface.ts'
 
 // Public surface for the harness/refine/compact machinery (consumers and
 // tests construct stores and inspect routes independently of the bridge).
@@ -91,7 +91,7 @@ export { HarnessStore, HARNESS_KINDS, HARNESS_LIMITS, renderHarnessSection } fro
 export type { HarnessApplyReport, HarnessEntry, HarnessKind, HarnessOp } from './harness-store.ts'
 export { REFINE_MAX_TOKENS, REFINE_SYSTEM, buildRefineMessages, parseRefineAnswer, resolveRefineTarget } from './refine.ts'
 export type { RefineTarget } from './refine.ts'
-export type { DasherCompactionResult, DasherCompactionSurface, DasherTokenMeterSurface } from './compaction-surface.ts'
+export type { DASHRCompactionResult, DASHRCompactionSurface, DASHRTokenMeterSurface } from './compaction-surface.ts'
 
 /** Cordis plugin name. */
 export const name = 'dashr-tool-presentation'
@@ -166,22 +166,22 @@ export const Config: z<Config> = z.object({
 })
 
 /**
- * The `dasher:harness` section order: the first section after the 100–199
+ * The `dashr:harness` section order: the first section after the 100–199
  * tool-guidance band (upstream's stated convention), where the Continual
  * Harness renders as durable guidance the model reads after its tools.
  */
 export const HARNESS_SECTION_ORDER = 200
 
-/** The model-facing name of the Dasher cell transport. */
+/** The model-facing name of the DASHR cell transport. */
 export const RUN_CELL_NAME = 'run_cell'
 
-/** The `tools:dasher-sdk` section order: the 100–199 tool-guidance band's SDK position, matching upstream `tools:sdk`. */
+/** The `tools:dashr-sdk` section order: the 100–199 tool-guidance band's SDK position, matching upstream `tools:sdk`. */
 export const SDK_SECTION_ORDER = 150
 
 /**
  * The `run_cell` tool description the model sees: cell semantics — the
  * persistent kernel — stated up front, unlike upstream's one-shot
- * `PYTHON_FLAVOR` (blueprint §1.1: Dasher is channel ② state codification,
+ * `PYTHON_FLAVOR` (blueprint §1.1: DASHR is channel ② state codification,
  * and the model's Code-Interpreter prior matches THIS contract).
  */
 const RUN_CELL_DESCRIPTION
@@ -217,10 +217,10 @@ const RUN_CELL_DESCRIPTION_PARAM_DESCRIPTION
  * structured `isError` result whose text carries the failure kind plus the
  * captured logs, so the model can self-correct.
  */
-export class DasherRunFailedError extends HarnessError {
+export class DASHRRunFailedError extends HarnessError {
   constructor(message: string) {
     super(message, 'CODE_RUN_FAILED')
-    this.name = 'DasherRunFailedError'
+    this.name = 'DASHRRunFailedError'
   }
 }
 
@@ -439,7 +439,7 @@ export interface RunCellBridgeOptions {
    * host-side provider mounted later still becomes visible; absent means
    * rlm() answers with a structured "unavailable" error, never a crash.
    */
-  requireSubagents?: () => DasherSubagentsSurface | undefined
+  requireSubagents?: () => DASHRSubagentsSurface | undefined
   /**
    * The live-run registry shared by every `run_cell` call in this
    * composition — rlm() in one cell and rlm_await() in a LATER cell resolve
@@ -456,7 +456,7 @@ export interface RunCellBridgeOptions {
   subagentModel?: string
   /**
    * The Continual Harness store shared by every `run_cell` call AND the
-   * `dasher:harness` prompt section in this composition (M4-B): refine()
+   * `dashr:harness` prompt section in this composition (M4-B): refine()
    * edits it, the next assembly re-renders from it. Omitted (direct
    * construction, tests) falls back to a per-call memory-only store, which
    * still serves refine() inside ONE cell.
@@ -485,13 +485,13 @@ export interface RunCellBridgeOptions {
    * no {@link compactModel} is configured. Absent (or an engine-less host)
    * means compact() answers with a structured "unavailable" error.
    */
-  requireCompaction?: () => DasherCompactionSurface | undefined
+  requireCompaction?: () => DASHRCompactionSurface | undefined
   /**
    * Resolves the optional host-plane `ctx.tokenMeter` for compact()'s usage
    * probe (the "check usage" half of the PA semantics). Absent simply omits
    * the `context_tokens` field from the result.
    */
-  requireTokenMeter?: () => DasherTokenMeterSurface | undefined
+  requireTokenMeter?: () => DASHRTokenMeterSurface | undefined
   /**
    * Lazily mounts and returns the DASHR-scoped compaction engine when
    * `compactModel` is configured (design A). Wired by {@link apply}; the
@@ -504,7 +504,7 @@ export interface RunCellBridgeOptions {
 
 /** The outcome of the lazy scoped-engine mount. */
 export type ScopedCompactionOutcome =
-  | { engine: DasherCompactionSurface; target: RefineTarget }
+  | { engine: DASHRCompactionSurface; target: RefineTarget }
   | { error: string }
 
 /** The `ctx.llm` surface refine() streams through (the seam's streaming call alone). */
@@ -1038,7 +1038,7 @@ export function createRunCellTool(registry: ToolRuntime, options: RunCellBridgeO
             // The probe is advisory; a failing meter must not mask compaction.
           }
         }
-        let engine: DasherCompactionSurface | undefined
+        let engine: DASHRCompactionSurface | undefined
         if (scopedCompaction !== undefined) {
           const scoped = await scopedCompaction(agent)
           if ('error' in scoped) {
@@ -1053,7 +1053,7 @@ export function createRunCellTool(registry: ToolRuntime, options: RunCellBridgeO
           }
           result['compact_model'] = null
         }
-        const summarize = (path: 'compact-now' | 'pressure', outcome: DasherCompactionResult | null): RlmJsonValue => {
+        const summarize = (path: 'compact-now' | 'pressure', outcome: DASHRCompactionResult | null): RlmJsonValue => {
           if (outcome === null) {
             return { ...result, status: 'no-op', path }
           }
@@ -1123,7 +1123,7 @@ export function createRunCellTool(registry: ToolRuntime, options: RunCellBridgeO
 
         if (result.error) {
           const logsText = result.logs.length > 0 ? `\nCaptured output:\n${result.logs.join('\n')}` : ''
-          throw new DasherRunFailedError(`code run failed (${result.error.kind}): ${result.error.message}${logsText}`)
+          throw new DASHRRunFailedError(`code run failed (${result.error.kind}): ${result.error.message}${logsText}`)
         }
         return {
           logs: result.logs,
@@ -1154,8 +1154,8 @@ export function createRunCellTool(registry: ToolRuntime, options: RunCellBridgeO
  * schema, snapshotted so a live definition cannot mutate under the render.
  * `run_cell` itself is excluded — it is the transport, not a binding.
  */
-export function collectSdkSchemas(registry: ToolRuntime, scope?: ScopeKey): DasherSdkSchema[] {
-  const collected: DasherSdkSchema[] = []
+export function collectSdkSchemas(registry: ToolRuntime, scope?: ScopeKey): DASHRSdkSchema[] {
+  const collected: DASHRSdkSchema[] = []
   for (const schema of registry.schemas(scope)) {
     if (schema.name === RUN_CELL_NAME) continue
     const definition = registry.get(schema.name, scope)
@@ -1168,13 +1168,13 @@ export function collectSdkSchemas(registry: ToolRuntime, scope?: ScopeKey): Dash
 }
 
 /**
- * Declare the Dasher cell presentation for every agent this composition
- * covers: the `run_cell` transport tool, the `tools:dasher-sdk` prompt
+ * Declare the DASHR cell presentation for every agent this composition
+ * covers: the `run_cell` transport tool, the `tools:dashr-sdk` prompt
  * section, the model-direct collapse guard, and the assembly filter that
  * leaves `run_cell` the only contributed tool schema.
  *
  * Mount through a preset's standing scope (`agent.cordis.yml` include row);
- * mounting unscoped is legal for a whole-process Dasher deployment and gives
+ * mounting unscoped is legal for a whole-process DASHR deployment and gives
  * the same shape at the global layer.
  * @param ctx - the mounting composition's context (a preset's standing scope).
  * @param config - the plugin config.
@@ -1235,7 +1235,7 @@ export function apply(ctx: Context, config: Config): void {
     }
 
     // The Continual Harness store (M4-B), shared by every run_cell call AND
-    // the dasher:harness prompt section in this composition. `agent/disposed`
+    // the dashr:harness prompt section in this composition. `agent/disposed`
     // drops one agent's in-memory cache only — with a harnessDir configured
     // the FILE persists by design, so the agent's next session restores its
     // entries (that is what "continual" means here).
@@ -1299,7 +1299,7 @@ export function apply(ctx: Context, config: Config): void {
               auto: false,
             })
             await fiber
-            const engine = engineScope.get('compaction') as DasherCompactionSurface | undefined
+            const engine = engineScope.get('compaction') as DASHRCompactionSurface | undefined
             if (engine === undefined) {
               return { error: 'compactModel is set but the DASHR-scoped compaction engine did not become available: the host composition must provide llm, tokenMeter, and sessions for it to load' }
             }
@@ -1315,10 +1315,10 @@ export function apply(ctx: Context, config: Config): void {
     // ① The transport tool, an ordinary scoped registration (module doc
     // records the reservation delta). Registered through the injected
     // runtime context so the tool's lifetime follows the runtime service's.
-    const requireSubagents = (): DasherSubagentsSurface | undefined => runtimeCtx.get('subagents')
+    const requireSubagents = (): DASHRSubagentsSurface | undefined => runtimeCtx.get('subagents')
     const requireLlm = (): LlmStreamSurface | undefined => runtimeCtx.get('llm') as LlmStreamSurface | undefined
-    const requireCompaction = (): DasherCompactionSurface | undefined => runtimeCtx.get('compaction') as DasherCompactionSurface | undefined
-    const requireTokenMeter = (): DasherTokenMeterSurface | undefined => runtimeCtx.get('tokenMeter') as DasherTokenMeterSurface | undefined
+    const requireCompaction = (): DASHRCompactionSurface | undefined => runtimeCtx.get('compaction') as DASHRCompactionSurface | undefined
+    const requireTokenMeter = (): DASHRTokenMeterSurface | undefined => runtimeCtx.get('tokenMeter') as DASHRTokenMeterSurface | undefined
     runtimeCtx.tools.register(createRunCellTool(registry, { requireRuntime, maxParallel, shapeDispatchLog, requireSubagents, rlmRuns, subagentModel, harness, refineModel, compactModel, requireLlm, requireCompaction, requireTokenMeter, scopedCompaction }))
 
     // ② The generated-SDK prompt section, regenerated from the CALLING
@@ -1326,7 +1326,7 @@ export function apply(ctx: Context, config: Config): void {
     // upstream's sdkSection: an assembly for a different scope renders its
     // own view, never ours).
     systemPrompt.section({
-      name: 'tools:dasher-sdk',
+      name: 'tools:dashr-sdk',
       order: SDK_SECTION_ORDER,
       text: context => renderToolsSdkPy(collectSdkSchemas(registry, context.scope)),
     })
@@ -1340,7 +1340,7 @@ export function apply(ctx: Context, config: Config): void {
     // therefore reflected by the next request's system prompt with no
     // restart, which is the whole point of the section.
     systemPrompt.section({
-      name: 'dasher:harness',
+      name: 'dashr:harness',
       order: HARNESS_SECTION_ORDER,
       text: context => renderHarnessSection(harness.list(String(context.agent?.id ?? ''))),
     })

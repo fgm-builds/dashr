@@ -1,17 +1,17 @@
 /**
- * Dasher Code Mode codegen — Python flavor, cell edition.
+ * DASHR Code Mode codegen — Python flavor, cell edition.
  *
  * The pure projection from one calling scope's visible tool schemas to the
  * Python SDK text the model programs against inside `run_cell` cells. Ported
  * from `@deepseek-ai/dsh-tools` `py-types.ts` (0.1.0-rc.6) per blueprint
- * §7.4, deliberately slimmed to Dasher's single-language, stateful surface:
+ * §7.4, deliberately slimmed to DASHR's single-language, stateful surface:
  *
  * - The usage instructions are OURS, not upstream's: upstream promises a
  *   one-shot program ("runs as the body of an async function", value-less
- *   between calls), while a Dasher cell runs on a PERSISTENT kernel whose
+ *   between calls), while a DASHR cell runs on a PERSISTENT kernel whose
  *   variables, imports, and definitions survive across `run_cell` calls.
  *   The prose here must never state the throwaway contract.
- * - No language table and no context-free renderer: Dasher renders Python
+ * - No language table and no context-free renderer: DASHR renders Python
  *   only, and object shapes always render through the named-`TypedDict`
  *   path this module owns. (Upstream's exported `jsonSchemaToPy` degrades
  *   every object to `dict[str, Any]`; reusing it would lose the shape.)
@@ -34,7 +34,7 @@ import type { JsonSchemaNode, JsonSchemaScalar } from '@deepseek-ai/dsh-tools'
  * The caller (the presentation plugin) excludes `run_cell` itself and reads
  * both through the tool registry's public projection APIs.
  */
-export interface DasherSdkSchema {
+export interface DASHRSdkSchema {
   /** Tool name as registered (may be exotic; the renderer routes those to subscript comments). */
   readonly name: string
   /** Tool description, rendered as the method docstring. */
@@ -68,7 +68,7 @@ const IDENTIFIER = /^[\p{XID_Start}_]\p{XID_Continue}*$/u
  * Both conditions are evaluated against the ENGINE's tables; a CPython older
  * than the engine could reject a character this accepts (the dangerous
  * direction — the tokenizer refuses the character and the whole SDK block
- * goes down). Dasher targets the kernel venv shipped with the runtime
+ * goes down). DASHR targets the kernel venv shipped with the runtime
  * (`npm run kernel:venv`, Python 3.11), which tracks modern CPython; the
  * residual skew is accepted rather than carrying upstream's deferred
  * target-interpreter-version plumbing.
@@ -420,7 +420,7 @@ function renderType(schema: unknown, className: string, state: RenderState): str
 
 /**
  * The fixed model-facing usage contract rendered above the declarations —
- * Dasher's OWN text (do not copy upstream `py-types.ts` SDK_INSTRUCTIONS: it
+ * DASHR's OWN text (do not copy upstream `py-types.ts` SDK_INSTRUCTIONS: it
  * promises one-shot program semantics, and our kernel is persistent).
  *
  * Every statement here must match what the `run_cell` transport actually
@@ -444,7 +444,7 @@ const SDK_INSTRUCTIONS = `## Writing cells for run_cell
 The available tools:`
 
 /**
- * Render the full `tools:dasher-sdk` prompt section: the cell-flavored
+ * Render the full `tools:dashr-sdk` prompt section: the cell-flavored
  * usage instructions above, one named `TypedDict` per tool argument or
  * output object (and per nested object), one awaitable method per visible
  * tool on a `Tools` protocol, the `ToolCallError` declaration, and the
@@ -458,7 +458,7 @@ The available tools:`
  * @param schemas - the calling scope's visible tools (caller excludes `run_cell`).
  * @returns the complete section text.
  */
-export function renderToolsSdkPy(schemas: readonly DasherSdkSchema[]): string {
+export function renderToolsSdkPy(schemas: readonly DASHRSdkSchema[]): string {
   const sorted = [...schemas].sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
   const state: RenderState = { classes: [], usedClassNames: new Set(), nextClassCounter: new Map(), typing: new Set(['Protocol']) }
   const members: string[] = []

@@ -33,7 +33,7 @@
 4. **内建先例 = headless**：`headless` bundle 就是"编码模式做成运行时"的
    官方示范——boot 层直接挂 `code-runtime` worker-thread，无 preset 名册，
    `tools.mode` 走 `DSH_TOOLS_MODE`。DASHR 的"Profile 层"完全可以照抄这
-   条，做一个 `dasher` profile：boot 挂 `rlmRuntime`，运行时即 RLM 模式。
+   条，做一个 `dashr` profile：boot 挂 `rlmRuntime`，运行时即 RLM 模式。
 5. **代价**：boot 层耦合面变宽（依赖 `agent-presets`/`session`/`sandbox`
    等行 id 稳定），与 v0.5 §7.6"运行时零上游依赖"决策存在**真实张力**，
    需重新权衡（§6）。
@@ -94,7 +94,7 @@ boot 阶段（决定"装了什么运行时"）           session 阶段（决定
 |---|---|---|
 | `dashr/package.json` | `dsh: null`，deps 仅 schemastery + zeromq | **非 bundle** → plain dependency |
 | `dashr-presentation/package.json` | `dsh: null` | **非 bundle** → plain dependency |
-| preset 文件 | `dashr-presentation/preset/dasher/{agent.cordis.yml,preset.yml}` | session 层 |
+| preset 文件 | `dashr-presentation/preset/dashr/{agent.cordis.yml,preset.yml}` | session 层 |
 | preset 注册方式 | README L48-73：**手动 `--patch` overlay** 给 `agent-presets` 加 `roots` 指到 `node_modules/dashr-tool-presentation/preset`，再手动设 default | **手动的 boot overlay** |
 
 即现状 = **plugin（依赖）+ preset（会话模式），且 preset 注册是手动的
@@ -123,7 +123,7 @@ L44-47 的 warning 分支），preset 名册根本不会自动知道它。
 
 - id: agent-presets                            # ③ 覆盖 preset 名册（web 才有此行）
   config:
-    default: dasher
+    default: dashr
     roots:
       - path: <bundle-dir>/preset               # 本包自带 preset 目录
         trust: system
@@ -131,27 +131,27 @@ L44-47 的 warning 分支），preset 名册根本不会自动知道它。
 
 效果：`dsh plugin add dashr-code-runtime-ipython` 一次命令 → `reconcilePlugins`
 检测到 `dsh.bundle.patch` → 自动追加进 `dsh.profile.bundles` → boot 时
-runtime + presentation 挂 host realm、preset root 注册、default 翻到 dasher。
+runtime + presentation 挂 host realm、preset root 注册、default 翻到 dashr。
 **手动 `--patch` 消失**。
 
 ### 4.2 Target 2 — DASHR 成为独立运行时 profile（headless 式一等运行时）
 
 **没有"profile package"这种可分发原语**——profile 是用户本地目录，创建靠
-`dsh plugin --profile dasher add <pkg>`（`DEFAULT_PROFILE_BUNDLES=[dsh-base]`）。
+`dsh plugin --profile dashr add <pkg>`（`DEFAULT_PROFILE_BUNDLES=[dsh-base]`）。
 所以"发一个 profile"实际是**发一个 bundle + 安装器/文档**。但语义上可以做
 成 headless 的镜像：
 
 ```
-dasher bundle（照抄 headless/cordis.patch.yml 的结构，~25 行）
+dashr bundle（照抄 headless/cordis.patch.yml 的结构，~25 行）
 - id: system-prompt        → RLM persona 覆盖
 - id: tools                → 呈现 RLM cell 界面（对应 headless 的 mode: DSH_TOOLS_MODE）
-- insert: rlm-runtime + rlm-presentation + dasher-startup + dasher-runner
+- insert: rlm-runtime + rlm-presentation + dashr-startup + dashr-runner
 ```
 
 对比 headless（`packages/bundle/headless/cordis.patch.yml` 全文仅 ~25 行）：
 它 **boot 层直接挂 `code-runtime` worker-thread，无 preset 名册**，
 `dsh --profile headless "<task>"` 即"编码模式做成一等运行时"。DASHR 照此做
-`dsh --profile dasher "<task>"`，即"RLM 做成一等运行时"。这比 Target 1
+`dsh --profile dashr "<task>"`，即"RLM 做成一等运行时"。这比 Target 1
 更进一步：**连 preset 名册都可有可无**（像 headless 那样 tools.mode 直给）。
 
 ---
@@ -222,7 +222,7 @@ dasher bundle（照抄 headless/cordis.patch.yml 的结构，~25 行）
 | `minimal` | 极简模式 | 3 | bash + str_replace_editor 双工具 |
 | `cordis` | 创造模式 | 4 | = 你说的 "Creator"；用于创作自定义 preset |
 
-加第 5 preset `dasher`（RLM 模式）到名册 = 正确路径，与现开发一致。
+加第 5 preset `dashr`（RLM 模式）到名册 = 正确路径，与现开发一致。
 
 ### 9.2 web 是默认 profile、无 TUI 入口
 
@@ -240,12 +240,12 @@ dasher bundle（照抄 headless/cordis.patch.yml 的结构，~25 行）
 `ui-conversation` …。→ 复用 = 把 `@deepseek-ai/dsh-web-app` 写进
 `dsh.profile.bundles`，**不 fork 源码**。
 
-### 9.4 profile 之间不隔离（影响"独立 dasher profile"决策）
+### 9.4 profile 之间不隔离（影响"独立 dashr profile"决策）
 
 - session 按 **workspace（cwd）** 隔离：`~/.dsh/sessions/<转义cwd>/session-<uuid>/`；
   session 头记 `agentPreset`，不记 profile。
 - `settings.yaml` / credentials **全局**（`~/.dsh/` 下，跨 profile 共享）。
-- 含义：独立 `dasher` profile 得到"默认 = RLM + 干净名册"，但**得不到数据
+- 含义：独立 `dashr` profile 得到"默认 = RLM + 干净名册"，但**得不到数据
   隔离**；若只要"在 Web UI 里加一个 RLM 模式"，最简做法是直接扩展现有 web
   profile（`dsh plugin --profile web add <dashr-bundle>`），连新 profile 都
   不用建。
@@ -283,8 +283,8 @@ bundle 正交：
 
 ```
 dsh-base（核心）+ DASHR runtime bundle（kernel+presentation，surface 无关）
-  ├─ + dsh-web-app  → dasher-web（借 Web UI）
-  └─ + dsh-tui      → dasher-tui（用 TUI）
+  ├─ + dsh-web-app  → dashr-web（借 Web UI）
+  └─ + dsh-tui      → dashr-tui（用 TUI）
 ```
 
 所以"一个包"= DASHR runtime bundle 一个，同时喂给两个 surface，不需要 fork
@@ -355,7 +355,7 @@ vs 2、TUI 路线选择全部挂起，等官方信号。
 | 会话选择 + 锁定 | `session.ts`；agent-presets README L148 |
 | `agent-presets` 行只在 web-app，`default: standard` | `packages/bundle/web-app/cordis.patch.yml` L421-424 |
 | headless = boot 挂 code-runtime、无 preset 名册 | `packages/bundle/headless/cordis.patch.yml` 全文 |
-| DASHR 两包 `dsh: null`（非 bundle） | `dasher/dashr/package.json`、`dashr-presentation/package.json` |
+| DASHR 两包 `dsh: null`（非 bundle） | `dashr/dashr/package.json`、`dashr-presentation/package.json` |
 | DASHR preset 注册靠手动 `--patch` | `dashr-presentation/README.md` L48-73 |
 | 四预设显示名（标准/PTC/极简/创造） | `apps/cli/config/agent-presets/<id>/preset.yml` |
 | `web` = 无参数默认别名 | `apps/cli/src/args.ts` L13, L66-70 |

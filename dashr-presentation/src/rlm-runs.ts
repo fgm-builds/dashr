@@ -1,5 +1,5 @@
 /**
- * The host-side registry of live rlm() runs: one {@link DasherSubagentRun}
+ * The host-side registry of live rlm() runs: one {@link DASHRSubagentRun}
  * per `run_id`, held from non-blocking admission until `rlm_await` settles it
  * or the parent session ends. Lives at the presentation tool-definition level
  * (one per composition/mount), not per `run_cell` call — rlm() in one cell and
@@ -10,11 +10,11 @@
  * @module dashr-tool-presentation/rlm-runs
  */
 
-import type { DasherSubagentRun } from './subagents-surface.ts'
+import type { DASHRSubagentRun } from './subagents-surface.ts'
 
 /** One live run plus the parent identity that owns it. */
 export interface RlmRunRecord {
-  run: DasherSubagentRun
+  run: DASHRSubagentRun
   parentId: string
 }
 
@@ -44,7 +44,7 @@ export class RlmRunRegistry {
 
   /** Dispose every run still owned by one parent session; safe when none match. */
   async disposeFor(parentId: string): Promise<void> {
-    const owned: { id: string, run: DasherSubagentRun }[] = []
+    const owned: { id: string, run: DASHRSubagentRun }[] = []
     for (const [id, record] of this.runs) {
       if (record.parentId === parentId) owned.push({ id, run: record.run })
     }

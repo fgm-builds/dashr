@@ -71,7 +71,7 @@ describe('run_cell snapshot path with live bindings (M4-A N1)', () => {
     ].join('\n'), { agent: first.agent.agent })
     expect(warm.isError).toBe(false)
 
-    const manifestPath = join(snapshotDir, 'dasher-agent', 'manifest.json')
+    const manifestPath = join(snapshotDir, 'dashr-agent', 'manifest.json')
     expect(existsSync(manifestPath)).toBe(true)
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as ManifestShape
     expect(manifest.skipped).toBe(false)
@@ -89,7 +89,7 @@ describe('run_cell snapshot path with live bindings (M4-A N1)', () => {
     for (const hidden of ['exit', 'quit', 'get_ipython', 'In', 'Out']) expect(manifest.names).not.toContain(hidden)
 
     // Second composition, same snapshotDir + same principal (the harness's
-    // fixed 'dasher-agent' session id): first boot restores before any code.
+    // fixed 'dashr-agent' session id): first boot restores before any code.
     const second = await setupKernel(presentation, { snapshotDir })
     await stubSubagents(second.ctx, 'stub-second-session')
     const resumed = await runCell(second.ctx, [

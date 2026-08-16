@@ -1,5 +1,5 @@
 /**
- * Preset smoke tier: the shipped `preset/dasher/agent.cordis.yml`, mounted for
+ * Preset smoke tier: the shipped `preset/dashr/agent.cordis.yml`, mounted for
  * real by `@deepseek-ai/dsh-agent-presets` (0.1.0-rc.6) the way a deployment
  * does — the roster's `mount()` under an agent factory `setup`, plus the
  * exported per-agent `mountPreset` primitive where the test needs one
@@ -104,7 +104,7 @@ async function harness(extras: { ptcRuntime?: boolean } = {}): Promise<Context> 
     await ctx.plugin(WorkerThreadCodeRuntime, {})
   }
   await ctx.plugin(AgentPresets, {
-    default: 'dasher',
+    default: 'dashr',
     roots: [{ path: PRESET_ROOT, trust: 'user' }],
     includeUserRoot: false,
   })
@@ -141,11 +141,11 @@ function kernelProcessCount(): number {
   }
 }
 
-/** Create one agent composed from the dasher preset, exactly as a factory `setup` would. */
+/** Create one agent composed from the dashr preset, exactly as a factory `setup` would. */
 async function agentOn(ctx: Context, id: string): Promise<Agent> {
   const handle = await ctx.agents.create({
     sessionId: SessionId(id),
-    setup: async (agentCtx: Context) => { void await ctx.agentPresets.mount(agentCtx, 'dasher') },
+    setup: async (agentCtx: Context) => { void await ctx.agentPresets.mount(agentCtx, 'dashr') },
   })
   return handle.agent
 }
@@ -154,7 +154,7 @@ async function agentOn(ctx: Context, id: string): Promise<Agent> {
 async function agentHandleOn(ctx: Context, id: string): Promise<{ handle: { dispose(): Promise<void> }, agent: Agent }> {
   const handle = await ctx.agents.create({
     sessionId: SessionId(id),
-    setup: async (agentCtx: Context) => { void await ctx.agentPresets.mount(agentCtx, 'dasher') },
+    setup: async (agentCtx: Context) => { void await ctx.agentPresets.mount(agentCtx, 'dashr') },
   })
   return { handle, agent: handle.agent }
 }
@@ -222,28 +222,28 @@ function rootResolves(ctx: Context, name: string): boolean {
   return key !== undefined && ctx.reflect.store[key] !== undefined
 }
 
-describe('the dasher preset roster', () => {
+describe('the dashr preset roster', () => {
   it('lists and resolves the shipped composition without a broken flag', async () => {
     const ctx = await harness()
     const listed = await ctx.agentPresets.list()
 
-    expect(listed.map(preset => preset.id)).toEqual(['dasher'])
+    expect(listed.map(preset => preset.id)).toEqual(['dashr'])
     expect(listed[0]!.broken).toBeUndefined()
-    expect(listed[0]!.path).toBe(join(PRESET_ROOT, 'dasher', 'agent.cordis.yml'))
-    expect((await ctx.agentPresets.resolve('dasher')).id).toBe('dasher')
+    expect(listed[0]!.path).toBe(join(PRESET_ROOT, 'dashr', 'agent.cordis.yml'))
+    expect((await ctx.agentPresets.resolve('dashr')).id).toBe('dashr')
   })
 
   it('mounts the real composition for two sessions and scopes the assembly to them', async () => {
     const ctx = await harness()
-    const dasher = await agentOn(ctx, 'sess-dasher-a')
-    const second = await agentOn(ctx, 'sess-dasher-b')
+    const dashr = await agentOn(ctx, 'sess-dashr-a')
+    const second = await agentOn(ctx, 'sess-dashr-b')
     const bare = await ctx.agents.create({ sessionId: SessionId('sess-bare') })
 
-    const prompt = await ctx.systemPrompt.assemble(assembleContextFor(dasher))
+    const prompt = await ctx.systemPrompt.assemble(assembleContextFor(dashr))
     // Model-facing tools collapse to the transport; every registered tool
     // lives in the Python SDK section instead.
     expect(prompt.tools.map(schema => schema.name)).toEqual(['run_cell'])
-    const sdk = prompt.sections.find(section => section.name === 'tools:dasher-sdk')
+    const sdk = prompt.sections.find(section => section.name === 'tools:dashr-sdk')
     expect(sdk).toBeDefined()
     expect(String(sdk!.text)).toContain('run_cell')
     expect(String(sdk!.text)).toContain('Python')
@@ -254,7 +254,7 @@ describe('the dasher preset roster', () => {
     // A second session joins the same standing mount without colliding.
     const secondPrompt = await ctx.systemPrompt.assemble(assembleContextFor(second))
     expect(secondPrompt.tools.map(schema => schema.name)).toEqual(['run_cell'])
-    expect(secondPrompt.sections.map(section => section.name)).toContain('tools:dasher-sdk')
+    expect(secondPrompt.sections.map(section => section.name)).toContain('tools:dashr-sdk')
 
     // A neighbor that joined no preset sees none of it: empty global layer,
     // no run_cell, no SDK section. It still sees the HOST's deployment persona
@@ -263,28 +263,28 @@ describe('the dasher preset roster', () => {
     // leak check is on the TEXT, not the section name.
     const barePrompt = await ctx.systemPrompt.assemble(assembleContextFor(bare.agent))
     expect(barePrompt.tools.map(schema => schema.name)).toEqual([])
-    expect(barePrompt.sections.map(section => section.name)).not.toContain('tools:dasher-sdk')
+    expect(barePrompt.sections.map(section => section.name)).not.toContain('tools:dashr-sdk')
     const barePersona = barePrompt.sections.find(section => section.name === 'deployment:persona')
-    expect(String(barePersona?.text ?? '')).not.toContain('Dasher agent')
-    const dasherPersona = prompt.sections.find(section => section.name === 'deployment:persona')
-    expect(String(dasherPersona?.text ?? '')).toContain('Dasher agent')
+    expect(String(barePersona?.text ?? '')).not.toContain('DASHR agent')
+    const dashrPersona = prompt.sections.find(section => section.name === 'deployment:persona')
+    expect(String(dashrPersona?.text ?? '')).toContain('DASHR agent')
   })
 
   it('keeps the kernel runtime out of the root realm (isolate realm) and leak-free at mount', async () => {
     const ctx = await harness()
-    const dasher = await agentOn(ctx, 'sess-realm-a')
+    const dashr = await agentOn(ctx, 'sess-realm-a')
     await agentOn(ctx, 'sess-realm-b')
 
     // Realm isolation: the host plane never resolves rlmRuntime…
     expect(rootResolves(ctx, 'rlmRuntime')).toBe(false)
     expect(ctx.reflect.get('rlmRuntime', false)).toBeUndefined()
     // …but a caller holding the agent addresses the standing instance, and a
-    // non-dasher agent addresses nothing.
-    expect(ctx.agentPresets.serviceFor(dasher, 'rlmRuntime')).toBeDefined()
+    // non-dashr agent addresses nothing.
+    expect(ctx.agentPresets.serviceFor(dashr, 'rlmRuntime')).toBeDefined()
     const bare = await ctx.agents.create({ sessionId: SessionId('sess-realm-bare') })
     expect(ctx.agentPresets.serviceFor(bare.agent, 'rlmRuntime')).toBeUndefined()
     // The mount audit's own leak check is empty for this composition.
-    const mount = standingMountFor(dasher.ctx)
+    const mount = standingMountFor(dashr.ctx)
     expect(mount).toBeDefined()
     expect(leakedServices(ctx, mount!.fiber)).toEqual([])
   })
@@ -371,7 +371,7 @@ describe('the dasher preset roster', () => {
     // composeFrom semantics — join, do not mount) and never run code.
     for (let i = 0; i < 3; i++) {
       const child = await ctx.agents.create({ sessionId: SessionId(`sess-lazy-child-${i}`) })
-      expect(ctx.agentPresets.composeFrom(child.agent.ctx, parent.ctx)).toBe('dasher')
+      expect(ctx.agentPresets.composeFrom(child.agent.ctx, parent.ctx)).toBe('dashr')
     }
     // Any eager spawn would appear here; lazy keys hold nothing.
     await new Promise(resolve => setTimeout(resolve, 300))
@@ -395,7 +395,7 @@ describe('the dasher preset roster', () => {
         async start(_name: string, request: { parent: Agent }) {
           for (let i = 0; i < 3; i++) {
             const child = await ctx.agents.create({ sessionId: SessionId(`rlm-child-${++childIndex}`) })
-            expect(ctx.agentPresets.composeFrom(child.agent.ctx, request.parent.ctx)).toBe('dasher')
+            expect(ctx.agentPresets.composeFrom(child.agent.ctx, request.parent.ctx)).toBe('dashr')
           }
           return {
             id: SessionId('rlm-stub-run'),
@@ -443,14 +443,14 @@ describe('the dasher preset roster', () => {
     // Another real tool: fs write/read through the realm-private fs-local
     // provider (cwd = DSH_CWD) → bytes on disk.
     expect(cellValue(await runCell(ctx, agent,
-      'await tools.write({"file_path": "preset-smoke.txt", "content": "hi from dasher"})',
+      'await tools.write({"file_path": "preset-smoke.txt", "content": "hi from dashr"})',
     )).logs).toEqual([])
     const read = cellValue(await runCell(ctx, agent,
       'print(await tools.read({"file_path": "preset-smoke.txt"}))',
     ))
-    expect(read.logs.join('\n')).toContain('hi from dasher')
+    expect(read.logs.join('\n')).toContain('hi from dashr')
     expect(await import('node:fs/promises').then(fs => fs.readFile(join(WORKDIR, 'preset-smoke.txt'), 'utf8')))
-      .toBe('hi from dasher')
+      .toBe('hi from dashr')
   })
 })
 
@@ -465,7 +465,7 @@ describe('kernel-per-session across per-agent mounts', () => {
     // realm is per-MOUNT, so kernel-per-session holds at this granularity
     // and, under the roster, needs provider-side Session/Agent keying.
     const ctx = await harness()
-    const preset = await ctx.agentPresets.resolve('dasher')
+    const preset = await ctx.agentPresets.resolve('dashr')
     const create = async (id: string): Promise<Agent> => {
       const handle = await ctx.agents.create({ sessionId: SessionId(id) })
       await mountPreset(handle.agent.ctx, preset)
@@ -492,32 +492,32 @@ describe('coexistence with a PTC Code-Mode session', () => {
   /** The worker-thread provider strips TypeScript in-process; a Node built without TS support degrades at run. */
   const ptcExecutable = process.features.typescript !== false
 
-  it('presents run_code + TS SDK to the PTC neighbor and run_cell + Python SDK to dasher', async () => {
+  it('presents run_code + TS SDK to the PTC neighbor and run_cell + Python SDK to dashr', async () => {
     const ctx = await harness({ ptcRuntime: true })
-    const dasher = await agentOn(ctx, 'sess-ptc-dasher')
+    const dashr = await agentOn(ctx, 'sess-ptc-dashr')
     // The PTC neighbor: host-plane codeRuntime + a mode:code presentation row
     // on its own scope (the `code` preset's row shape, mounted directly).
     const ptc = await ctx.agents.create({ sessionId: SessionId('sess-ptc') })
     const ptcScope: Scope = createScope(ctx, ptc.agent)
     await ptcScope.ctx.plugin({ apply: presentAs, inject: presentationInject, Config: presentationConfig }, { mode: 'code' })
 
-    const dasherPrompt = await ctx.systemPrompt.assemble(assembleContextFor(dasher))
+    const dashrPrompt = await ctx.systemPrompt.assemble(assembleContextFor(dashr))
     const ptcPrompt = await ctx.systemPrompt.assemble(assembleContextFor(ptc.agent))
 
-    expect(dasherPrompt.tools.map(schema => schema.name)).toEqual(['run_cell'])
+    expect(dashrPrompt.tools.map(schema => schema.name)).toEqual(['run_cell'])
     expect(ptcPrompt.tools.map(schema => schema.name)).toEqual(['run_code'])
-    expect(dasherPrompt.sections.map(section => section.name)).toContain('tools:dasher-sdk')
+    expect(dashrPrompt.sections.map(section => section.name)).toContain('tools:dashr-sdk')
     const tsSdk = ptcPrompt.sections.find(section => section.name === 'tools:sdk')
     expect(tsSdk).toBeDefined()
     expect(String(tsSdk!.text)).toContain('run_code')
     expect(String(tsSdk!.text)).toContain('TypeScript')
 
     // No cross-leak in either direction.
-    expect(dasherPrompt.tools.some(schema => schema.name === 'run_code')).toBe(false)
+    expect(dashrPrompt.tools.some(schema => schema.name === 'run_code')).toBe(false)
     expect(ptcPrompt.tools.some(schema => schema.name === 'run_cell')).toBe(false)
 
-    // Dasher executes Python in the same process, on its own kernel.
-    expect(cellValue(await runCell(ctx, dasher, 'print("dasher says hi")')).logs).toEqual(['dasher says hi'])
+    // DASHR executes Python in the same process, on its own kernel.
+    expect(cellValue(await runCell(ctx, dashr, 'print("dashr says hi")')).logs).toEqual(['dashr says hi'])
 
     // The PTC side executes on ITS runtime. With a TS-capable Node this is a
     // real worker-thread run; this host's Node 22 binary is compiled without

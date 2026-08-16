@@ -9,7 +9,7 @@
 > v0.5：定位升级（用户拍板）——vendored Service Definition + 自有键
 > `rlmRuntime` + 自有 presentation plugin。与内建编码模式（code preset）同级、
 > 同规则；不再注册 `codeRuntime` 键。§1.2 契约冲突因此消解（§7.6）。
-> v0.4.1：§7.4 Dasher 模式 + 工具两层策略。v0.4：peer review 吸收 + §10 实现定案。
+> v0.4.1：§7.4 DASHR 模式 + 工具两层策略。v0.4：peer review 吸收 + §10 实现定案。
 > 演进：v0.1 三层分层 → v0.2 单插件中间层。
 > 决策者：用户。
 
@@ -180,17 +180,17 @@ persistent kernel vs stateless python -c"。
 ## 6. 里程碑（v0.4：M1 已交付 + 验收标准补充）
 
 - **M1（✅ 2026-08-16 完成，Phase A）**：`code-runtime-ipython` provider +
-  持久 kernel + `run_code` 全链路。产出 `dasher/dashr/` 插件包，22/22 测试
+  持久 kernel + `run_code` 全链路。产出 `dashr/dashr/` 插件包，22/22 测试
   绿 ×2（含状态化/绑定回调/生命周期/中断/快照），tsc clean，零孤儿进程。
   实现定案见 §11。
 - **M2（✅ 2026-08-16 完成，Stage A+B）**：① 键迁移：provider 注册 `codeRuntime` → `rlmRuntime`
   （内核零改动，测试保持绿）；② vendored Service Definition（去 dsh-code-runtime peer 依赖）；
-  ③ 自写 `dasher-tool-presentation` plugin；④ Python SDK 渲染器精简版（自有 cell 持久语义
+  ③ 自写 `dashr-tool-presentation` plugin；④ Python SDK 渲染器精简版（自有 cell 持久语义
   instructions）；⑤ 工具→binding 组装（PendingDispatch driver 与上游 code-mode.ts 逐 token
-  等价移植，嵌套调度+审计无降级）；⑥ Dasher preset 文件（照抄 code preset 骨架 + isolate
+  等价移植，嵌套调度+审计无降级）；⑥ DASHR preset 文件（照抄 code preset 骨架 + isolate
   realm）；⑦ M1 补遗：并行 run ×2 断言、README
   验收：PTC 共存（同进程真 worker-thread provider + mode:code 邻居，run_code/TS SDK 与
-  run_cell/Python SDK 双向无泄漏、各自执行）、Dasher preset 挂载冒烟（roster 真挂载、
+  run_cell/Python SDK 双向无泄漏、各自执行）、DASHR preset 挂载冒烟（roster 真挂载、
   assembly 抑制、邻居不受影响、真 kernel e2e 含真 dsh 工具全栈）、22/22→24/24 原测试保持绿
   + presentation 57/57、发布形态验证（tarball 装包 + 消费者 typecheck 无 skipLibCheck exit 0）
   实现定案见 §12。报告：dev/m2a-{report,verify-report}.md、dev/m2b-{report,verify-report}.md
@@ -221,12 +221,12 @@ persistent kernel vs stateless python -c"。
     冲突、不向组合外解析）；unset 时继承宿主已挂引擎（configured ?? latest ?? agent 模型链）。
     细节与证据见 dev/m4b-report.md。
   - **M4-C**（可选，后置）：fork-server——子代理廉价并行、复用父 kernel 状态。与
-    profile-layer 可行性研究（dasher-profile-layer-feasibility.md §10）的 bundle 化决策
+    profile-layer 可行性研究（dashr-profile-layer-feasibility.md §10）的 bundle 化决策
     联动，收益模型依赖部署形态，待其落定再动工。
 
 M3 新增硬性项（M2 验证阶段实证，P1）：
 - **kernel per-session 键控**：isolate realm 实测为 per-mount 非 per-session（§7.4.1 勘误），
-  roster 路径同进程所有 dasher 会话共享一个 kernel；provider 须按 Session/Agent 键控 kernel
+  roster 路径同进程所有 dashr 会话共享一个 kernel；provider 须按 Session/Agent 键控 kernel
   实例（官方 "plugins key their state by Session/Agent" 模式），与 lazy-start 同批落地
 - **中断双通道竞态修复**（abort-at-cell-start 窗口 100% 击杀 kernel，量化见 §5 风险表）：
   两阶段 grace（control-channel 先发、短 grace 后未 idle 才补 SIGALRM）或 kernel 侧 busy
@@ -283,12 +283,12 @@ DASHR 以**标准 Cordis 插件包**发布（非 fork 补丁、非源码修改�
 3. 第五 preset 的"唯一工具界面"由上游 `mode: 'code'` 内置机制获得（§1.3
    第三条），无需自研 schema 抑制——§7.2 原表述据此修正
 
-### 7.4 Dasher 模式：第五 Agent Preset（v0.5 重定位：RLM 运行时）
+### 7.4 DASHR 模式：第五 Agent Preset（v0.5 重定位：RLM 运行时）
 
 安装与使用流（用户定调）：
 1. 用户安装 Dash Agent
 2. 安装 DASHR 插件（`dsh plugin add <pkg>` 或 `--patch`）
-3. 原四模式之上新增 **Dasher 模式（RLM 模式）** = 第五 Agent Preset，
+3. 原四模式之上新增 **DASHR 模式（RLM 模式）** = 第五 Agent Preset，
    与内建 PTC 编码模式**同级、同规则**——它 = host codeRuntime +
    presentation 行 + 注册表；我们 = rlmRuntime + 自有 presentation
    plugin + 同一注册表
@@ -297,11 +297,11 @@ DASHR 以**标准 Cordis 插件包**发布（非 fork 补丁、非源码修改�
 
 结构（与内建 code preset 逐项对照）：
 
-| 构件 | 内建 PTC 模式 | Dasher/RLM 模式 |
+| 构件 | 内建 PTC 模式 | DASHR/RLM 模式 |
 |---|---|---|
 | runtime 服务键 | `ctx.codeRuntime`（worker-thread） | `ctx.rlmRuntime`（我们的 kernel provider） |
 | Service Definition | dsh-code-runtime 包 | **vendored 进插件源码**（294 行裁剪：弃 invariant.ts，保留类型形状） |
-| presentation | `dsh-agent-tool-presentation` (`mode: code`) | **自写** `dasher-tool-presentation`（解析 rlmRuntime，参考蓝本同在） |
+| presentation | `dsh-agent-tool-presentation` (`mode: code`) | **自写** `dashr-tool-presentation`（解析 rlmRuntime，参考蓝本同在） |
 | 工具 SDK 渲染器 | ts-types + py-types（Consumer 侧） | **自写精简版**（单语言 Python、无 flavor 表；参考 py-types.ts 818 行） |
 | 工具注册表 | host 平面注册表，preset 层组合 | **同一个**（复用 dsh tools registry 的分层作用域） |
 | 隔离 | preset 层 + realm | 同左：isolate realm 保证 kernel-per-session（§7.4.1） |
@@ -312,12 +312,12 @@ M2 迁移项：M1 交付的 provider 从注册 `codeRuntime` 键改为 `rlmRunti
 
 #### 7.4.1 隔离设计（realm 三合一）
 
-工具行写进 Dasher preset 层 → 只进本 preset 的 scope 层 → PTC/standard/
+工具行写进 DASHR preset 层 → 只进本 preset 的 scope 层 → PTC/standard/
 minimal 会话的 catalog 与 SDK 不可见（注册表分层作用域，preset 文件
 注释原文背书 "layered per scope"）。provider 服务行进 isolate realm：
 
 ```yaml
-- id: dasher-kernel
+- id: dashr-kernel
   name: cordis:group
   group: true
   isolate:
@@ -325,12 +325,12 @@ minimal 会话的 catalog 与 SDK 不可见（注册表分层作用域，preset 
 ```
 
 效果：① PTC 会话仍解析 host worker-thread，同进程互不干扰（不发生
-"PTC 被换脑"——M2B 真 worker-thread 实证）；② ~~第二个 Dasher 会话 → Cordis
+"PTC 被换脑"——M2B 真 worker-thread 实证）；② ~~第二个 DASHR 会话 → Cordis
 自动新 realm 实例 → kernel-per-session 官方语义~~ **（勘误 2026-08-16，M2B 四层
 验证：loader 源码 + agent-presets 源码 + 双路径 spike 实证 + 负向对照）**：
 `isolate: true` 是 **per-mount** 实例而非 per-session——cordis 无 per-session
 原语。roster 路径（`agentPresets.mount` 单飞 standing mount，会话经
-composeFrom 父链加入）下同进程所有 dasher 会话**共享一个 rlmRuntime/kernel**
+composeFrom 父链加入）下同进程所有 dashr 会话**共享一个 rlmRuntime/kernel**
 （会话 B 可读会话 A 的变量；上游 mount.spec 自证 "sessions stay apart inside
 it by the plugin's own Session/Agent keying, not by instance count"）；
 per-agent 挂载路径才每会话一个 realm/kernel。**kernel-per-session 改由 M3
@@ -379,7 +379,7 @@ Consumer 零改动红利）。v0.5 重启此路线的依据：上游 0.1.x 处�
   （§7.6），漂移无从影响。仅剩 cordis 基底变更需跟进
 - 新增风险：自写 presentation/SDK 与 dsh 注册表协作面的**语义漂移**
   （我们参考的是 0.1.x 快照；dsh 注册表分层作用域/preset mount 规则若
-  变，Dasher preset 组合需 re-verify）——CI 保留 preset 挂载冒烟测试
+  变，DASHR preset 组合需 re-verify）——CI 保留 preset 挂载冒烟测试
 - `peerDependency @deepseek-ai/cordis` 版本对齐：每次 dsh 升级
   re-verify，CI 契约快照测试
 
@@ -520,7 +520,7 @@ kernel 内 Python 函数 `rlm()` → hostHandlers 回调 → dsh `ctx.subagent`
 | 1 | 契约冲突处置路线（§1.2） | **结案（v0.5 新终态）**：换键 `rlmRuntime` + 自有 presentation → 不再是 `codeRuntime` provider，invariant 不适用。上游 PR 降为可选社区贡献 |
 | 2 | 完成值语义 | **结案**：kernel 层严格守约（对 Consumer 的承诺）；SDK/instructions 自研，服务"一切代码化"LLM 思维，不跟 PTC 路径（用户 2026-08-16 定调） |
 | 3 | lazy-start | **结案**：写死，M3 硬性要求 |
-| 4 | 包名 scope | **悬置**：本地 `--patch` 开发不需要；发布时三选一（裸名 `dashr` / `@<id>/dashr` / 描述性前缀名）。产品名 Dasher 已定，包名仅 npm 拼写 |
+| 4 | 包名 scope | **悬置**：本地 `--patch` 开发不需要；发布时三选一（裸名 `dashr` / `@<id>/dashr` / 描述性前缀名）。产品名 DASHR 已定，包名仅 npm 拼写 |
 | 5 | 四模式出处修准 | **已结**：creator 出处 = `.agents/notes/implemented/feature/2026-08-10-creator-guidance-introduce-cue.md` + `architecture/2026-08-03-per-session-agent-presets.md`；四模式真实，第五 preset 结论不变 |
 
 ## 12. M2 实现定案（2026-08-16，Stage A+B 三重验收产出）

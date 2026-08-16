@@ -52,7 +52,7 @@ async function cell(ctx: Context, agent: Agent, code: string): Promise<{ logs: s
 /** The harness section text one assembly renders for an agent. */
 async function harnessSectionText(ctx: Context, agent: Agent): Promise<string> {
   const assembly = await ctx.systemPrompt.assemble({ agent, scope: agent })
-  return assembly.sections.find(section => section.name === 'dasher:harness')?.text ?? ''
+  return assembly.sections.find(section => section.name === 'dashr:harness')?.text ?? ''
 }
 
 describe('Continual Harness store + section', () => {
@@ -61,10 +61,10 @@ describe('Continual Harness store + section', () => {
     expect(await harnessSectionText(ctx, agent.agent)).toBe('')
 
     const store = new HarnessStore()
-    await store.applyOps('dasher-agent', [
+    await store.applyOps('dashr-agent', [
       { op: 'add', kind: 'memory', title: 'Prefers tabs', content: 'The user prefers tabs.' },
     ])
-    const rendered = renderHarnessSection(store.list('dasher-agent'))
+    const rendered = renderHarnessSection(store.list('dashr-agent'))
     expect(rendered).toContain('[memory-1] memory — Prefers tabs')
     expect(rendered).toContain('The user prefers tabs.')
     expect(renderHarnessSection([])).toBe('')
@@ -82,13 +82,13 @@ describe('Continual Harness store + section', () => {
     await cell(ctx, agent.agent, 'program')
 
     const assembly = await ctx.systemPrompt.assemble({ agent: agent.agent, scope: agent.agent })
-    const harness = assembly.sections.find(section => section.name === 'dasher:harness')
+    const harness = assembly.sections.find(section => section.name === 'dashr:harness')
     expect(harness?.text).toContain('Use { {var}} syntax in prompts.')
     // After the tool-guidance band: the assembly sorts sections by order, so
     // the SDK section (order 150) precedes the harness section (order 200),
     // and interpolation over the entry's braces does not throw.
     const names = assembly.sections.map(section => section.name)
-    expect(names.indexOf('dasher:harness')).toBeGreaterThan(names.indexOf('tools:dasher-sdk'))
+    expect(names.indexOf('dashr:harness')).toBeGreaterThan(names.indexOf('tools:dashr-sdk'))
     expect(() => renderPrompt(assembly)).not.toThrow()
     expect(HARNESS_SECTION_ORDER).toBe(200)
   })
@@ -282,7 +282,7 @@ describe('harness persistence', () => {
     await cell(first.ctx, first.agent.agent, 'program')
 
     // A completely fresh composition (new Context, new store) over the same
-    // directory: the same agent id ('dasher-agent' in both setups) restores
+    // directory: the same agent id ('dashr-agent' in both setups) restores
     // its entries on first touch.
     const second = await setup(fakeRuntime, { harnessDir: dir })
     const text = await harnessSectionText(second.ctx, second.agent.agent)

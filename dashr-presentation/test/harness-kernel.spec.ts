@@ -33,7 +33,7 @@ describe('refine() / compact() on a real kernel', () => {
     expect(value.result?.refined).toBe(true)
     expect(value.logs.join('\n')).toContain('"op": "add"')
     const assembly = await ctx.systemPrompt.assemble({ agent: agent.agent, scope: agent.agent })
-    expect(assembly.sections.find(section => section.name === 'dasher:harness')?.text).toContain('Kernel fact')
+    expect(assembly.sections.find(section => section.name === 'dashr:harness')?.text).toContain('Kernel fact')
   })
 
   it('awaits compact() inside a cell and returns the structured ladder result', async () => {

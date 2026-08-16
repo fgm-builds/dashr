@@ -125,7 +125,7 @@ Every field of the plugin `Config` (schemastery defaults shown):
   queue rather than interleave; see `test/parallel.spec.ts`. Runs on
   DIFFERENT principals execute on their own kernels concurrently.
 - **What snapshots do NOT carry** (M4-B): the Continual Harness — the
-  presentation-side durable prompt store behind the `dasher:harness` section
+  presentation-side durable prompt store behind the `dashr:harness` section
   and the `refine()` binding — lives OUTSIDE the kernel namespace and
   `snapshotDir`, persisted under its own `harnessDir` by the presentation
   package. A snapshot/restore cycle therefore never rolls harness entries

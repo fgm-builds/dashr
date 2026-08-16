@@ -7,7 +7,7 @@
 
 | 项 | deepseek-harness (dsh) | prime-agent (PI) |
 |---|---|---|
-| Clone | `dasher/deepseek-harness` @ `47f9438` (2026-08-13, npm-public PR #2519) | `dasher/prime-agent` @ `97b994c` (2026-08-14, daemon spawn ledger #1387) |
+| Clone | `dashr/deepseek-harness` @ `47f9438` (2026-08-13, npm-public PR #2519) | `dashr/prime-agent` @ `97b994c` (2026-08-14, daemon spawn ledger #1387) |
 | 语言主体 | TypeScript (ESM), Node ≥22.19 / ≥24 | TS host + Python runtime（模型面 Python，调度面 TS） |
 | 规模 | ~85MB 源码, 2319 ts + 19 py | ~30MB, 925 ts + 23 py（+runtime） |
 | pnpm workspaces | `packages/<group>/<pkg>` 两级, 50 组 ~230 包 | `packages/{agent,ai,coding-agent,tui}` 4 包 + `prime-agent-runtime/` (py) |

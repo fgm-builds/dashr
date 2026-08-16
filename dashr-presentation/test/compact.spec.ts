@@ -4,7 +4,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { BasicCompactionEngine } from '@deepseek-ai/dsh-compaction-basic'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { FakeCellRuntime, fakeRuntime, runCell, setup } from './helpers.ts'
-import type { DasherCompactionResult, DasherCompactionSurface } from '../src/index.ts'
+import type { DASHRCompactionResult, DASHRCompactionSurface } from '../src/index.ts'
 
 /**
  * M4-B Work 2: the compact() binding — the PA "check usage → summarize →
@@ -16,7 +16,7 @@ import type { DasherCompactionResult, DasherCompactionSurface } from '../src/ind
  */
 
 /** A canonical fake compaction result. */
-function fakeResult(over: Partial<DasherCompactionResult> = {}): DasherCompactionResult {
+function fakeResult(over: Partial<DASHRCompactionResult> = {}): DASHRCompactionResult {
   return {
     compactionId: 'cmp-1',
     summarySeq: 42,
@@ -28,8 +28,8 @@ function fakeResult(over: Partial<DasherCompactionResult> = {}): DasherCompactio
 
 /** Mount a stub `ctx.compaction` engine capturing compactNow / compactIfNeeded. */
 async function registerStubCompaction(ctx: Context, behavior: {
-  compactNow?: (agent: Agent, signal: AbortSignal) => Promise<DasherCompactionResult | null>
-  compactIfNeeded?: (agent: Agent, trigger: string, signal: AbortSignal) => Promise<DasherCompactionResult | null>
+  compactNow?: (agent: Agent, signal: AbortSignal) => Promise<DASHRCompactionResult | null>
+  compactIfNeeded?: (agent: Agent, trigger: string, signal: AbortSignal) => Promise<DASHRCompactionResult | null>
 }): Promise<{ nowCalls: Array<{ agent: Agent, signal: AbortSignal }>, pressureCalls: Array<{ agent: Agent, trigger: string, signal: AbortSignal }> }> {
   const nowCalls: Array<{ agent: Agent, signal: AbortSignal }> = []
   const pressureCalls: Array<{ agent: Agent, trigger: string, signal: AbortSignal }> = []
@@ -43,7 +43,7 @@ async function registerStubCompaction(ctx: Context, behavior: {
         pressureCalls.push({ agent, trigger, signal })
         return behavior.compactIfNeeded?.(agent, trigger, signal) ?? null
       },
-    } satisfies DasherCompactionSurface)
+    } satisfies DASHRCompactionSurface)
   } })
   onTestFinished(() => fiber.dispose())
   return { nowCalls, pressureCalls }
@@ -232,7 +232,7 @@ describe('compact() design A: the DASHR-scoped engine', () => {
     session.requestHeader = () => ({ config: { provider: 'deepseek', model: 'dsv3' } })
     session.events = []
     const looping = agent.agent as unknown as { runMaintenance?: () => never }
-    looping.runMaintenance = (): never => { throw new Error('agent "dasher-agent" already has active work') }
+    looping.runMaintenance = (): never => { throw new Error('agent "dashr-agent" already has active work') }
     const { nowCalls, pressureCalls } = await registerStubCompaction(ctx, {})
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
     runtime.behavior = async (request) => {

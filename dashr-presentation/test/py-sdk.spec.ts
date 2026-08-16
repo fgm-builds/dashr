@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { renderToolsSdkPy } from '../src/py-sdk.ts'
-import type { DasherSdkSchema } from '../src/py-sdk.ts'
+import type { DASHRSdkSchema } from '../src/py-sdk.ts'
 
 /** One tool schema fixture with typed object args and output. */
-const echo: DasherSdkSchema = {
+const echo: DASHRSdkSchema = {
   name: 'echo',
   description: 'Echo the value back.',
   parameters: {
@@ -19,7 +19,7 @@ const echo: DasherSdkSchema = {
 }
 
 /** A fixture whose arguments nest objects two levels deep. */
-const nested: DasherSdkSchema = {
+const nested: DASHRSdkSchema = {
   name: 'deploy',
   description: 'Deploy a service.',
   parameters: {
@@ -88,7 +88,7 @@ describe('renderToolsSdkPy — determinism and shape', () => {
   })
 
   it('degrades an object whose field names are not legal class-syntax members, without dropping the tool', () => {
-    const exotic: DasherSdkSchema = {
+    const exotic: DASHRSdkSchema = {
       name: 'mixed',
       description: 'Has an exotic field.',
       parameters: {
@@ -159,7 +159,7 @@ describe('renderToolsSdkPy — exotic, reserved, and underscore-leading tool nam
   })
 })
 
-describe('renderToolsSdkPy — Dasher cell instructions', () => {
+describe('renderToolsSdkPy — DASHR cell instructions', () => {
   it('states the persistent-kernel cell semantics, run_cell by name', () => {
     const text = renderToolsSdkPy([echo])
     expect(text).toContain('## Writing cells for run_cell')

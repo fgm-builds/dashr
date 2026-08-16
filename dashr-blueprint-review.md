@@ -1,6 +1,6 @@
-# DASHR 蓝图评审 v1.0 — 对 dasher-blueprint.md v0.3
+# DASHR 蓝图评审 v1.0 — 对 dashr-blueprint.md v0.3
 
-> 日期：2026-08-16 · 评审对象：`dasher-blueprint.md` v0.3（2026-08-16）
+> 日期：2026-08-16 · 评审对象：`dashr-blueprint.md` v0.3（2026-08-16）
 > 方法：不评观点、评证据——蓝图引用的每处"源码证据"到两个 clone
 > （`deepseek-harness @47f9438` / `prime-agent @97b994c`）逐条核实，
 > 再核对推理是否用满了证据。讨论底稿为 2026-08-16 会话，本文为其档存。
