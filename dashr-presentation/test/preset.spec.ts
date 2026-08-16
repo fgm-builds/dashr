@@ -24,8 +24,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import { mkdtempSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -69,13 +68,30 @@ function kernelPython(): string {
   return candidates.find(candidate => candidate !== undefined && existsSync(candidate)) ?? 'python3'
 }
 
-// The preset's two `!!js` env knobs, resolved once per test FILE (each spec
+// The preset's `!!js` env knobs, resolved once per test FILE (each spec
 // file runs in its own worker; the roster reads them at mount time).
 process.env.DASHR_KERNEL_PYTHON = kernelPython()
+// The include row's path is a LITERAL placeholder in the shipped file (group
+// rows skip `!!js` interpolation, so it cannot be an env expression). Mirror
+// `install.sh`: stage a temp copy of the shipped preset root with the
+// placeholder replaced by the pinned `@deepseek-ai/dsh` devDependency's
+// standard composition (its npm tarball ships `config/agent-presets`).
+const STANDARD_PRESET_PATH = fileURLToPath(
+  new URL('../node_modules/@deepseek-ai/dsh/config/agent-presets/standard/agent.cordis.yml', import.meta.url),
+)
+const PLACEHOLDER = 'DASHR_PLACEHOLDER_standard_preset_path_install_script_required'
+const SHIPPED_PRESET_ROOT = fileURLToPath(new URL('../preset', import.meta.url))
+const PRESET_ROOT = mkdtempSync(join(tmpdir(), 'dashr-preset-root-'))
+mkdirSync(join(PRESET_ROOT, 'dashr'), { recursive: true })
+copyFileSync(join(SHIPPED_PRESET_ROOT, 'dashr', 'agent.cordis.yml'), join(PRESET_ROOT, 'dashr', 'agent.cordis.yml'))
+copyFileSync(join(SHIPPED_PRESET_ROOT, 'dashr', 'preset.yml'), join(PRESET_ROOT, 'dashr', 'preset.yml'))
+writeFileSync(
+  join(PRESET_ROOT, 'dashr', 'agent.cordis.yml'),
+  readFileSync(join(PRESET_ROOT, 'dashr', 'agent.cordis.yml'), 'utf8').replace(PLACEHOLDER, STANDARD_PRESET_PATH),
+)
 const WORKDIR = mkdtempSync(join(tmpdir(), 'dashr-preset-'))
 process.env.DSH_CWD = WORKDIR
 
-const PRESET_ROOT = fileURLToPath(new URL('../preset', import.meta.url))
 
 /** The base bare preset rows resolve from: inside this package, so the walk reaches its node_modules. */
 const HOST_BASE = new URL('.', import.meta.url).href
