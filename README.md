@@ -1,11 +1,12 @@
 # Dashr: Recursive Language Model (RLM) Plugin for DSH
 
 <p align="center">
-  <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/plugin%20for-dsh-blueviolet.svg?style=flat-square" alt="DSH Plugin" /></a>
-  <a href="https://npmjs.com/package/dsh-rlm-mode"><img src="https://img.shields.io/badge/npm-dsh-rlm-mode-CB3837.svg?style=flat-square&logo=npm" alt="npm package" /></a>
-  <a href="https://arxiv.org/abs/2512.24601"><img src="https://img.shields.io/badge/paper-arXiv%3A2512.24601-B31B1B.svg?style=flat-square" alt="Paper arXiv:2512.24601" /></a>
-  <a href="https://github.com/fgm-builds/dashr"><img src="https://img.shields.io/badge/github-fgm--builds%2Fdashr-black.svg?style=flat-square&logo=github" alt="Repository" /></a>
+  <a href="https://github.com/fgm-builds/dashr/actions"><img src="https://img.shields.io/badge/tests-140%20passing-brightgreen.svg?style=flat-square" alt="Tests" /></a>
   <a href="https://github.com/fgm-builds/dashr/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License" /></a>
+  <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/plugin%20for-dsh-blueviolet.svg?style=flat-square" alt="DSH Plugin" /></a>
+  <a href="https://npmjs.com/package/dsh-rlm-mode"><img src="https://img.shields.io/badge/npm-dsh--rlm--mode-CB3837.svg?style=flat-square&logo=npm" alt="npm package" /></a>
+  <a href="https://arxiv.org/abs/2512.24601"><img src="https://img.shields.io/badge/theory-arXiv%3A2512.24601-B31B1B.svg?style=flat-square" alt="Theory arXiv:2512.24601" /></a>
+  <a href="https://github.com/fgm-builds/dashr"><img src="https://img.shields.io/badge/github-fgm--builds%2Fdashr-black.svg?style=flat-square&logo=github" alt="Repository" /></a>
 </p>
 
 ---
@@ -19,7 +20,7 @@ curl -fsSL https://raw.githubusercontent.com/fgm-builds/dashr/main/install.sh | 
 ### Alternative: DSH Plugin CLI (NPM)
 
 ```bash
-dsh plugin --profile web add dashr-plugin
+dsh plugin --profile web add dsh-rlm-mode
 ```
 
 > After installation, launch `dsh web` and select the **DASHR** agent preset.
@@ -32,19 +33,13 @@ dsh plugin --profile web add dashr-plugin
 
 Instead of paying massive token costs on every round-trip tool call in standard multi-turn chat, Dashr equips the agent with a **stateful, persistent Python kernel**. The agent writes self-contained Python programs per cell, manipulating context, tools, and memory as native variables.
 
-```
-cell 1:  df = tools.read("large_dataset.csv").as_dataframe()   # data stays in kernel memory
-cell 2:  summary = df.describe().to_dict()                     # intermediate computation survives
-cell 3:  tools.write("report.json", summary)                   # zero prompt context pollution
-```
-
 ---
 
-## 💡 Background & RLM Architecture
+## 💡 Theoretical Foundations: The RLM Theory
 
 Large Language Models (LLMs) operate under strict context window limits. Even with extended window sizes, standard agent architectures suffer from **quadratic attention overhead, distraction, and context dilution**.
 
-Dashr implements the **Recursive Language Model (RLM)** architecture ([arXiv:2512.24601](https://arxiv.org/abs/2512.24601)) to solve this bottleneck:
+Dashr implements the **Recursive Language Model (RLM)** theory ([arXiv:2512.24601](https://arxiv.org/abs/2512.24601)) to solve this bottleneck:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -129,7 +124,7 @@ The architecture and design of Dashr build upon groundbreaking research in recur
 1. **Recursive Language Models (RLM)**  
    *Recursive Language Models*, 2025.  
    Paper: [arXiv:2512.24601](https://arxiv.org/abs/2512.24601)  
-   *Establishes the recursive decomposition and sub-agent execution paradigm for bounded context management.*
+   *Establishes the recursive decomposition and sub-agent execution theory for bounded context management.*
 
 2. **Continual Harness & Prompt Refinement**  
    *Continual Harness for Autonomous Agents*, 2026.  
