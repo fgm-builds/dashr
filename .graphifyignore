@@ -1,0 +1,24 @@
+# Graphify extraction ignore (gitignore spec, last-match-wins)
+# Graphify does NOT read .gitignore automatically — this file scopes the
+# knowledge graph to OUR code only, so upstream repos are not re-analyzed here.
+
+# upstream sources (analyzed separately in their own repos)
+upstream/
+
+# dependencies / environment
+node_modules/
+.venv/
+.git/
+
+# build output
+dist/
+build/
+lib/
+*.tsbuildinfo
+*.tsbuildinfo.*
+
+# graphify self-output
+graphify-out/
+
+# scratch
+.scratch/

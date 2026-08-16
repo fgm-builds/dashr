@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-labelledby="dash-title dash-desc">
+  <title id="dash-title">Dash</title>
+  <desc id="dash-desc">A swift bird in full-speed dive, its streamlined body forming a dash mark.</desc>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f7f5f0"/>
+      <stop offset="1" stop-color="#efebe4"/>
+    </linearGradient>
+  </defs>
+
+  <!-- rounded tile -->
+  <rect width="200" height="200" rx="44" fill="url(#tile)"/>
+
+  <!-- speed streaks (trailing, left) -->
+  <g stroke="#c9c2b4" stroke-width="6" stroke-linecap="round">
+    <line x1="30" y1="84" x2="52" y2="84"/>
+    <line x1="22" y1="116" x2="52" y2="116"/>
+  </g>
+
+  <!-- swift / dash silhouette (pointing right = dashing forward) -->
+  <g fill="#141414">
+    <!-- swept wing (upper) -->
+    <path d="M 116 86 C 98 72 74 60 46 54 C 62 64 84 80 98 92 Z"/>
+    <!-- swept wing (lower) -->
+    <path d="M 116 114 C 98 128 74 140 46 146 C 62 136 84 120 98 108 Z"/>
+    <!-- body + head + forked tail -->
+    <path d="M 50 100
+             C 50 92 60 87 78 87
+             C 100 87 122 92 140 96
+             C 152 99 164 100 176 100
+             C 164 102 152 103 140 106
+             C 122 110 100 115 78 115
+             C 60 115 50 110 50 100 Z"/>
+    <!-- forked tail notch -->
+    <path d="M 50 95 L 60 100 L 50 105 Z" fill="#f7f5f0"/>
+  </g>
+
+  <!-- single accent: forward motion tick -->
+  <path d="M 148 78 L 158 84 L 148 90" fill="none" stroke="#eb6c36" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

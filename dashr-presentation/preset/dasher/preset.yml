@@ -1,0 +1,5 @@
+# Display metadata for the Dasher preset. The id is the directory name
+# (`dasher`) and the trust comes from the root it is discovered under —
+# neither is writable here; this file carries display text ONLY.
+name: Dasher
+description: Persistent Python kernel as the whole tool interface — the RLM runtime with run_cell transport.

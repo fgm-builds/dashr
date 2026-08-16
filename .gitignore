@@ -1,0 +1,25 @@
+# --- dependencies ---
+node_modules/
+
+# --- python venv ---
+.venv/
+
+# --- upstream sources (tracked in their own git repos) ---
+upstream/
+
+# --- graphify knowledge-graph output ---
+graphify-out/
+
+# --- scratch notes / disposable artifacts ---
+.scratch/
+
+# --- build output ---
+dist/
+build/
+lib/
+*.tsbuildinfo
+*.tsbuildinfo.*
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db

@@ -1,0 +1,43 @@
+{
+  "name": "dashr-code-runtime-ipython",
+  "description": "Persistent IPython-kernel provider for the DeepSeek Harness code-execution seam (DASHR)",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest --run",
+    "test:watch": "vitest",
+    "kernel:venv": "uv venv .venv-kernel --python 3.11 && uv pip install --python .venv-kernel/bin/python ipykernel dill"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "zeromq": "^6.6.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@types/node": "^22.10.5",
+    "tsdown": "^0.15.7",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
+  }
+}
