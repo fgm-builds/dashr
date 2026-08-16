@@ -83,6 +83,13 @@ fi
 if [ -n "$DASHR_SRC" ]; then
   SRC="$DASHR_SRC"
   info "using local source: $SRC (skipping fetch)"
+  for pkg in dashr dashr-presentation; do
+    if [ ! -d "$SRC/$pkg/lib" ]; then
+      info "building $pkg (lib/ missing)"
+      (cd "$SRC/$pkg" && npm install --no-audit --no-fund >/dev/null && npm run build >/dev/null)
+    fi
+    (cd "$SRC/$pkg" && npm pack --pack-destination "$TMP_ROOT" >/dev/null)
+  done
 else
   step "4/5 fetching dashr $DASHR_VERSION"
   ARCHIVE="$TMP_ROOT/dashr-src.tar.gz"
@@ -106,13 +113,6 @@ fi
 
 # ---------------------------------------------------- 5. plugin + preset
 step "5/5 installing plugins into profile '$DSH_PROFILE' and localizing the preset"
-if [ -n "$DASHR_SRC" ]; then
-  # local source: pack into the temp dir first
-  for pkg in dashr dashr-presentation; do
-    (cd "$SRC/$pkg" && npm pack --pack-destination "$TMP_ROOT" >/dev/null)
-  done
-fi
-
 # --config.auto-install-peers=false is MANDATORY: the profile already resolves
 # @deepseek-ai/* peers through the harness install; letting pnpm auto-install
 # them would add a second (divergent) copy of cordis and friends.
