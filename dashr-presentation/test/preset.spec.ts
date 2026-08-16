@@ -47,6 +47,7 @@ import { createScope } from '@deepseek-ai/dsh-scope'
 import type { Scope } from '@deepseek-ai/dsh-scope'
 import WorkerThreadCodeRuntime from '@deepseek-ai/dsh-code-runtime-worker-thread'
 import { apply as presentAs, inject as presentationInject, Config as presentationConfig } from '@deepseek-ai/dsh-agent-tool-presentation'
+import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 
 /**
  * The kernel interpreter, most stable first. `DASHR_KERNEL_PYTHON` is the
@@ -99,6 +100,53 @@ async function harness(extras: { ptcRuntime?: boolean } = {}): Promise<Context> 
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(AgentLoop, { agents: [] })
+  // The HOST fs backend the restacked preset's `tool-fs` row resolves (the
+  // standard-preset shape — the deployment's host owns fs, not the preset;
+  // the e2e test below writes and reads real bytes through it).
+  await ctx.plugin(LocalFileSystem, { cwd: process.env.DSH_CWD })
+  // Host-plane stubs for the services the stacked preset's STANDARD rows
+  // resolve (the rename-era restack, 2026-08-16: this preset now carries the
+  // full standard tool set whose backends are host-plane singletons). The
+  // real deployment supplies these (shell/fs/subprocess/…), so the test
+  // host mirrors just the surfaces the rows touch at MOUNT time — every
+  // remaining call is execution-time and these spec tests never drive those
+  // tools. The two group-internal services (compaction, workflowEngine) are
+  // provided by the preset's own rows inside their isolate realms, exactly
+  // as on the real host.
+  await ctx.plugin({ name: 'host-services-for-stacked-preset', apply(c) {
+    c.provide('shell', { sandboxMode: undefined })
+    c.provide('shellEnv', { collect: () => ({}) })
+    c.provide('subprocess', {})
+    c.provide('jobs', {
+      attachController() {},
+      onJobDone() {},
+    })
+    // skill-filesystem registers its provider at mount and disposes it on
+    // teardown, so the stub must actually invoke the factory — an ignored
+    // factory leaves `provider` undefined and the cleanup throws.
+    let skillProvider: { dispose(): Promise<void> } | undefined
+    c.provide('skills', {
+      registerProvider(factory: (control: unknown) => { dispose(): Promise<void> }) {
+        skillProvider = factory({ invalidate() {}, signal: new AbortController().signal })
+      },
+      list: async () => [],
+      get: async () => undefined,
+      snapshot: async () => ({ skills: [], complete: true }),
+    })
+    onTestFinished(async () => { await skillProvider?.dispose() })
+    c.provide('goals', { get: () => undefined })
+    c.provide('userQuestions', {})
+    c.provide('web', {})
+    c.provide('tokenMeter', { measure: () => ({ totalTokens: 0 }) })
+    c.provide('commands', { register: () => undefined })
+    // getProvider → undefined defers the subagent TOOL rows gracefully (the
+    // upstream tool logs "not registered yet"); rlm() still resolves this
+    // service directly. Tests that need spawn behavior mutate `start`.
+    c.provide('subagents', {
+      getProvider: () => undefined,
+      async start() { throw new Error('harness subagents stub: start not configured for this test') },
+    })
+  } })
   if (extras.ptcRuntime) {
     // Host-plane PTC runtime, exactly where the `code` preset expects it.
     await ctx.plugin(WorkerThreadCodeRuntime, {})
@@ -247,7 +295,10 @@ describe('the dashr preset roster', () => {
     expect(sdk).toBeDefined()
     expect(String(sdk!.text)).toContain('run_cell')
     expect(String(sdk!.text)).toContain('Python')
-    expect(String(sdk!.text)).not.toContain('TypeScript')
+    // Mode-defining check: the PTC transport name must not appear in the
+    // Python SDK (tool descriptions legitimately mention the word
+    // TypeScript now that the standard catalog rides the bindings).
+    expect(String(sdk!.text)).not.toContain('run_code')
     // The preset persona shadows the deployment default for this agent.
     expect(prompt.sections.map(section => section.name)).toContain('deployment:persona')
 
@@ -390,22 +441,24 @@ describe('the dashr preset roster', () => {
     const parent = await agentOn(ctx, 'sess-rlm-parent')
     let childIndex = 0
 
-    await ctx.plugin({ name: 'stub-subagents-for-rlm', apply(c) {
-      c.provide('subagents', {
-        async start(_name: string, request: { parent: Agent }) {
-          for (let i = 0; i < 3; i++) {
-            const child = await ctx.agents.create({ sessionId: SessionId(`rlm-child-${++childIndex}`) })
-            expect(ctx.agentPresets.composeFrom(child.agent.ctx, request.parent.ctx)).toBe('dashr')
-          }
-          return {
-            id: SessionId('rlm-stub-run'),
-            localAgent: undefined,
-            result: Promise.resolve({ output: [{ type: 'text', text: 'done' }], stopReason: 'completed' }),
-            async dispose() {},
-          }
-        },
-      })
-    }})
+    // The harness-level subagents stub owns the service; this test only
+    // configures the start behavior (a second provide would throw).
+    const subagents = ctx.get('subagents') as {
+      getProvider: (provider: string) => unknown
+      start: (name: string, request: { parent: Agent }) => Promise<unknown>
+    }
+    subagents.start = async (_name: string, request: { parent: Agent }) => {
+      for (let i = 0; i < 3; i++) {
+        const child = await ctx.agents.create({ sessionId: SessionId(`rlm-child-${++childIndex}`) })
+        expect(ctx.agentPresets.composeFrom(child.agent.ctx, request.parent.ctx)).toBe('dashr')
+      }
+      return {
+        id: SessionId('rlm-stub-run'),
+        localAgent: undefined,
+        result: Promise.resolve({ output: [{ type: 'text', text: 'done' }], stopReason: 'completed' }),
+        async dispose() {},
+      }
+    }
 
     // Warm the parent's kernel first (lazy spawn happens on its first cell).
     expect(cellValue(await runCell(ctx, parent, 'rlm_parent_warm = 1')).logs).toEqual([])
@@ -440,8 +493,9 @@ describe('the dashr preset roster', () => {
     )).logs).toEqual([])
     expect(agent.session.events.some(event => event.type === 'todo/write')).toBe(true)
 
-    // Another real tool: fs write/read through the realm-private fs-local
-    // provider (cwd = DSH_CWD) → bytes on disk.
+    // Another real tool: fs write/read through the HOST's local filesystem
+    // backend (cwd = DSH_CWD; the restacked preset resolves host fs like the
+    // standard preset) → bytes on disk.
     expect(cellValue(await runCell(ctx, agent,
       'await tools.write({"file_path": "preset-smoke.txt", "content": "hi from dashr"})',
     )).logs).toEqual([])
