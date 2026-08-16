@@ -53,12 +53,32 @@ export interface DasherSubagentRun {
   dispose(): Promise<void>
 }
 
+/**
+ * The subset of dsh-agent `AgentOptions` the rlm() bridge may set: model
+ * selection alone (M4-A scope — blueprint §6). The upstream type also
+ * carries `provider`/`maxTokens`, deliberately NOT mirrored: the mirror's
+ * standing rule is to type only what the bridge constructs, and widening
+ * this would grow the rlm() binding's contract past what DASHR offers.
+ */
+export interface DasherSubagentAgentOptions {
+  /** Model id the child's own requests use, shadowing the parent's route. */
+  model?: string
+}
+
 /** The subset of `SubagentStartRequest` the rlm() bridge constructs. */
 export interface DasherSubagentStartRequest {
   label?: string
   prompt: ContentBlock[]
   parent: Agent
   signal: AbortSignal
+  /**
+   * Per-child agent-route overrides (M4-A). The bridge sets `model` alone.
+   * Absent means pure parent inheritance: dsh's `resolveChildAgentOptions`
+   * spreads the parent's provider/model/maxTokens and only overlays
+   * `...requested`, so an omitted `agentOptions` leaves the child on the
+   * parent's own route without this side assuming what that route is.
+   */
+  agentOptions?: DasherSubagentAgentOptions
 }
 
 /** The `ctx.subagents` service surface the rlm() bridge calls. */

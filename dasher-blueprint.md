@@ -3,7 +3,8 @@
 > 日期：2026-08-16 · 状态：M1 ✅、M2 ✅（2026-08-16 交付并三重验收：③④⑤⑥⑦ 全落，
 > presentation 57/57 + dashr 24/24 绿、preset 真挂载冒烟、PTC 共存真 worker-thread 实证、
 > 发布形态 tarball 装包+消费者 typecheck 全过、零孤儿）；M3-A ✅（键控+lazy+中断竞态，2026-08-16 验收）、
-> M3-B ✅（rlm() binding + turn-end 快照/restore + 死亡 revive 链，2026-08-16 验收）、M4 未动工。
+> M3-B ✅（rlm() binding + turn-end 快照/restore + 死亡 revive 链，2026-08-16 验收）、M4-A ✅（子代理模型三级优先级 + N1/N2 加固，2026-08-16 验收）、
+> M4-B ✅（Continual Harness + refine()/compact() + refineModel/compactModel 拆键 + compactModel→scoped 引擎映射（设计 A），2026-08-16 验收：Verifier PASS + 父代理验收，P1 选择子前导斜杠边界修复，presentation 100/100）。
 > M3 新增两项 P1 硬性项（§5 风险表升级 + §6 M3 验收补充）。§7.4.1 勘误（realm 实测语义）。
 > v0.5：定位升级（用户拍板）——vendored Service Definition + 自有键
 > `rlmRuntime` + 自有 presentation plugin。与内建编码模式（code preset）同级、
@@ -203,7 +204,25 @@ persistent kernel vs stateless python -c"。
   provider 后接）+ state-snapshot/restore（turn-end size-cap + manifest 升级 + 首次启动 restore）+
   kernel revive 链（死亡 → 最近快照 revive + turn-N 错误文案）。dashr 40/40、presentation 68/68。
   报告 dev/m3b-report.md。
-- **M4**（phase 2）：refinement / Continual Harness、PA compact 语义、fork-server
+- **M4**（2026-08-16 计划定稿，分三期，见 dev/m4-plan.md）：
+  - **M4-A** ✅（2026-08-16 验收，Doer→Verifier→父代理闭环）：子代理模型配置路径——rlm() `model` kwarg →
+    `SubagentStartRequest.agentOptions.model`（dsh `resolveChildAgentOptions` 既有摊开，
+    零上游改动）；配置默认 `subagentModel`（**落 `dashr-tool-presentation` 行 config**——
+    rlm() 归属行，非 provider 行，键名不变）；缺省继承父模型。优先级
+    rlm(model=) > subagentModel > 父模型。附 N1/N2 测试加固（M3-B 验收遗留）。
+  - **M4-B** ✅（2026-08-16 验收 PASS，Doer→Verifier→父代理闭环）：refinement / Continual Harness（prompt-as-variable：harness 状态持久化 +
+    system prompt 每轮从 refinement 状态重建）+ PA compact 语义（dsh `ctx.compaction` 之上）。
+    **辅助模型拆键定稿**：`refineModel` / `compactModel` 独立可选配置键，各自缺省回退父模型
+    （不用共用 auxModel——refinement 质量敏感、compaction 成本敏感，独立键分别调优）。
+    **与 dsh compaction-basic `summarizationModel` 的映射定稿（设计 A 采纳）**：`compactModel`
+    设定时，presentation 用 `ctx.isolate('compaction')` 隔离标签程序化挂一个 DASHR scope 内的
+    `BasicCompactionEngine`（单键驱动：yml 只写 `compactModel`，引擎的 summarizationProvider/Model
+    由代码派生，`auto: false` 不与宿主引擎的自动监听双发；隔离标签保证与宿主引擎无 provide
+    冲突、不向组合外解析）；unset 时继承宿主已挂引擎（configured ?? latest ?? agent 模型链）。
+    细节与证据见 dev/m4b-report.md。
+  - **M4-C**（可选，后置）：fork-server——子代理廉价并行、复用父 kernel 状态。与
+    profile-layer 可行性研究（dasher-profile-layer-feasibility.md §10）的 bundle 化决策
+    联动，收益模型依赖部署形态，待其落定再动工。
 
 M3 新增硬性项（M2 验证阶段实证，P1）：
 - **kernel per-session 键控**：isolate realm 实测为 per-mount 非 per-session（§7.4.1 勘误），
@@ -417,6 +436,18 @@ session 目录
 - kernel death 行为链（review §4）：死亡 → 自动 revive（最近 snapshot）→
   error 告知模型"namespace 已从 turn-N 快照恢复，最近 K 轮变量操作需
   重放"——模型对 `df` 存在性的认知由此纠正
+
+### 8.4 Continual Harness 的独立持久化通道（M4-B 新增）
+
+M4-B 的 harness 存储（`harnessDir`，presentation 侧 per-agent JSON）与
+§8 的 kernel snapshot（`snapshotDir`，provider 侧 dill namespace）是**两条
+独立的持久化通道**：同一 agent id 键控，但互不参与对方的失效判定——
+snapshot/restore 往环**从不回滚 harness 条目**（harness 是刻意的 durable
+prompt 状态，refine 落地即持久，模型"已记住"的认知不因 kernel 死亡复活
+而丢失），harness 编辑也**从不使 snapshot 失效**（harness 不进 namespace、
+不进 manifest 校验集）。代价是显式接受的非一致：revive 后的 namespace
+（turn-N）与 harness（refine 最新态）分属不同时间线，由 §8.3 的既有措辞
+风格约束——恢复告知只陈述 namespace 侧，不承诺 prompt 侧同步。
 
 ## 9. 子 Agent 函数化归属（M3-B 已定稿实现形态，2026-08-16）
 

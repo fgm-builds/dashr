@@ -8,6 +8,8 @@ upstream/
 # dependencies / environment
 node_modules/
 .venv/
+.venv-kernel/
+.venv*/
 .git/
 
 # build output

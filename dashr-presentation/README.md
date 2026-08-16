@@ -155,17 +155,27 @@ The row waits for `ctx.rlmRuntime` at mount (`ctx.inject`) and re-reads it at
 use time: a preset against a runtime-less deployment fails at mount, named in
 the preset's activation audit, instead of at the first prompt.
 
-## rlm() subagent binding (M3-B)
+## rlm() subagent binding (M3-B; model selection added in M4-A)
 
 Each cell installs two bare callable globals on top of the `tools` namespace:
 
-- `handle = await rlm(prompt, label=None)` — non-blocking ADMISSION of a child
-  agent through the host-plane `ctx.subagents` service, in-process provider
-  `spawn` first (blueprint §9). The `await` resolves when the child is
+- `handle = await rlm(prompt, label=None, model=None)` — non-blocking ADMISSION
+  of a child agent through the host-plane `ctx.subagents` service, in-process
+  provider `spawn` first (blueprint §9). The `await` resolves when the child is
   PUBLISHED, not when it finishes — the same admission semantics as the RLM
-  runtime's own `rlm()`. Returns `{run_id, label, provider: 'spawn', local}`;
-  the child keeps running after the cell returns and is cancelled by the
-  enclosing `run_cell`'s outer signal.
+  runtime's own `rlm()`. Returns
+  `{run_id, label, provider: 'spawn', local, model}`; the child keeps running
+  after the cell returns and is cancelled by the enclosing `run_cell`'s outer
+  signal.
+- Child-model selection (M4-A) is a three-level priority:
+  `rlm(model="...")` > the composition's `subagentModel` config > the parent
+  agent's own model. The first two tiers reach the harness as
+  `agentOptions: { model }` on the start request (the handle's `model` field
+  reports what was resolved, `null` for inheritance); when BOTH are unset the
+  request carries no `agentOptions` at all and the harness's own
+  parent-inheritance applies — this plugin never names the parent model
+  itself. `model=None` is "unspecified" (falls through to the config tier),
+  and any non-string value is rejected as a result error, never a host crash.
 - `result = await rlm_await(run_id)` — blocks the cell until that run settles
   and returns `{output: str, stop_reason: str, structured: Any|None}`
   (`output` is the child's final text, with non-text blocks folded to compact
@@ -188,11 +198,97 @@ realm-private `rlmRuntime` stays invisible to the root — which is why the
 rlm() host callback lives HERE (it is the one layer that can simultaneously
 see `ctx.subagents`, the parent `Agent` on `exec.agent`, and the abort signal).
 
+## Continual Harness + refine() (M4-B)
+
+The Continual Harness is per-agent DURABLE PROMPT STATE — notes, memories, and
+skills carried into every future system prompt of the same agent id. It is
+prompt-as-variable: the `dasher:harness` prompt section (order 200, the first
+slot after the 100–199 tool-guidance band) re-renders from the CURRENT store at
+EVERY assembly, so a refine() that lands mid-turn is visible to the very next
+model request with no restart. An empty harness renders an empty section
+(`renderPrompt` drops it), and entries are brace-neutralized at render time so
+a literal `{{var}}` inside a memory can never throw (or silently interpolate)
+the prompt-variable machinery.
+
+Each cell exposes `summary = await refine(instruction)` — one bare callable
+global:
+
+1. The host resolves the aux model route: `refineModel` config (`'provider/model'`,
+   or a bare model id paired with the calling agent's own provider) or, unset,
+   the agent's own provider+model (refinement writes durable state, so the
+   default is the agent's own model).
+2. One hand-built `ctx.llm.stream` call (NOT `markAgentLoopRequest`-marked —
+   that identity belongs to loop-built requests) carries the full current
+   harness, the instruction, and a strict op-schema directive.
+3. The answer is parsed under an all-or-nothing schema
+   (`add {kind,title,content} | update {id,title?,content?} | delete {id}`);
+   anything unparseable or invalid leaves the store UNTOUCHED and returns a
+   structured `error` field.
+4. Validated ops apply atomically and the cell gets
+   `{refined: true, applied: [...], entries_before, entries_after, model}`.
+
+Storage: `harnessDir` set → one JSON file per agent
+(`<harnessDir>/<agent>/harness.json`), written tmp-sibling + rename (atomic),
+restored by the next composition serving the same agent id; `agent/disposed`
+drops only the in-memory cache — the file survives by design ("continual").
+`harnessDir` unset → memory-only, dying with the composition (the same opt-in
+posture as the runtime's `snapshotDir`; a silent default location would
+persistently alter future prompts without a deployment decision). Soft caps:
+64 entries, 200-char titles, 8000-char content. Entry text is foreign model
+output; the caps bound what a runaway refine can add to every future prompt.
+The `await` blocks the cell until the aux call settles, under the kernel run's
+own wall budget (`runTimeoutMs`), and the abort chain follows `exec.signal` —
+an aborted refine is a structured `error`, never a partial store mutation.
+
+## compact() (M4-B)
+
+`result = await compact()` (or `compact(reason)`) exposes the PA
+check-usage→summarize→keep-working semantics over the compaction seam. It
+first attaches the session's current pressure as `context_tokens` when a
+`ctx.tokenMeter` is mounted (the probe is advisory — a failing meter never
+masks compaction), then resolves an engine:
+
+- `compactModel` SET → a DASHR-scoped `BasicCompactionEngine` is lazily
+  mounted once per composition under `ctx.isolate('compaction')` (a proper
+  plugin fiber so the engine's own `llm/tokenMeter/sessions` injects resolve
+  OUTWARD to the host singletons) with `summarizationProvider/Model` derived
+  from the key (`'provider/model'` explicit; a bare model id pairs with the
+  first calling agent's provider) and `auto: false` — the host engine, if any,
+  keeps the automatic pressure/overflow listeners and is never disturbed
+  (cordis keys service registration by isolation label, so the scoped provide
+  cannot collide with it and never resolves outside this composition). The
+  dynamic import keeps the optional peer `@deepseek-ai/dsh-compaction-basic`
+  unloaded for deployments that never set the key.
+- `compactModel` UNSET → the host-mounted `ctx.compaction` engine, inheriting
+  its model chain (configured ?? latest-request ?? agent — "follows the
+  session model"). No engine mounted → a structured `unavailable` error (with
+  `context_tokens` still reported), never a crash.
+
+Execution is a two-step ladder, because the seam's `compactNow` requires an
+IDLE agent and an in-cell call always runs inside a live agent turn: it tries
+`compactNow` first (an idle-path deployment or a future seam change benefits),
+and on the expected `busy` falls through to `compactIfNeeded('pressure')` —
+the same policy entry the engine itself runs between steps: below threshold an
+honest `{status: 'no-op'}`, above it the selected range is summarized NOW and
+the model's next request in the SAME turn already rides the compacted history.
+Success reports `{status: 'compacted', path, compaction_id, summary_seq,
+shadowed_items, shadowed_tokens, compact_model}`; non-busy failures are
+structured `error` fields.
+
 ## Config
 
 | Field | Default | Meaning |
 | --- | --- | --- |
 | `maxParallelSubCalls` | `10` | Cap on one cell's overlapping sub-calls (native scheduler contract; `1` = strictly serial). |
+| `subagentModel` | unset | Composition-wide default model for `rlm()` children — the middle tier of `rlm(model=...) > subagentModel > parent inheritance`. Unset means pure parent inheritance (no `agentOptions` on the start request). Must be a non-empty string when set. |
+| `harnessDir` | unset | Root for the Continual Harness store: one `harness.json` per agent, atomically written, restored by the next composition of the same agent id. Unset = memory-only (dies with the composition). Must be a non-empty string when set. |
+| `refineModel` | unset | Aux model route for `refine()`: `'provider/model'` explicit, a bare model id paired with the calling agent's provider, or unset for the agent's own route. Must be a non-empty string when set. |
+| `compactModel` | unset | Summarization model for `compact()`: mounts a DASHR-scoped `BasicCompactionEngine` (design A — see above) under `ctx.isolate('compaction')` with this route and `auto: false`. Unset inherits the host engine and its model chain. Requires the optional peer `@deepseek-ai/dsh-compaction-basic` when set. Must be a non-empty string when set. |
+
+Dependencies note: `@deepseek-ai/dsh-compaction-basic` is an OPTIONAL peer
+dependency (dev-installed for the design-A tests). Nothing loads it unless
+`compactModel` is set; a deployment that sets the key without the peer gets a
+structured error naming the missing package, never a crash at import time.
 
 ## Tests
 

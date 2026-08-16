@@ -113,6 +113,60 @@
       config:
         python: !!js process.env.DASHR_KERNEL_PYTHON ?? 'python3'
 
+    # The presentation row's config knobs (M4-A + M4-B). All are opt-in:
+    # unset means inheritance or disabled, never a silent default — and an
+    # EMPTY string on any of them fails the mount loudly (it is a typo of
+    # "unset", not a value).
+    #
+    # `subagentModel` (M4-A) — the composition-wide default model for
+    # rlm()-spawned children. The full priority is three-level: a per-call
+    # `rlm(prompt, model="...")` kwarg wins over this key, this key wins
+    # over leaving the child on the parent agent's own model, and ALL three
+    # tiers are opt-in — with neither kwarg nor key set, the start request
+    # carries no `agentOptions` and the harness's own parent-inheritance
+    # applies (zero DASHR-side assumptions about the parent's route). Set it
+    # when a deployment runs children on a cheaper model than the parent.
+    #
+    # `harnessDir` (M4-B) — the Continual Harness store: per-agent durable
+    # prompt state (notes/memories/skills) that the `dasher:harness` prompt
+    # section re-renders at EVERY assembly (prompt-as-variable) and that
+    # cells edit through `await refine(instruction)` (one auxiliary model
+    # call → validated add/update/delete ops; anything unparseable leaves
+    # the store untouched). Unset = memory-only: the harness dies with this
+    # composition. Set it to a stable path when agents should REMEMBER
+    # across restarts — one `harness.json` per agent id under this root,
+    # atomically written, restored by the next composition of the same id.
+    # It is deliberately separate from the runtime's `snapshotDir`: kernel
+    # snapshots carry variables, the harness carries prompt state, and the
+    # two persistence channels never invalidate each other.
+    #
+    # `refineModel` (M4-B) — the model route for refine()'s auxiliary call:
+    # `'provider/model'` selects explicitly, a bare model id pairs with the
+    # calling agent's own provider, and unset uses the agent's own
+    # provider+model. Refinement writes DURABLE prompt state, so the
+    # default is the agent's own model — set this only to route refinement
+    # to a cheaper/stronger model than the conversation.
+    #
+    # `compactModel` (M4-B) — the summarization model for the in-cell
+    # `await compact()` binding (the PA check-usage→summarize→keep-working
+    # semantics). When set, a DASHR-scoped `BasicCompactionEngine` mounts
+    # lazily on first compact() call under a runtime `ctx.isolate('compaction')`
+    # realm (not a yml entry-local isolate) with this route
+    # and `auto: false` (the host engine — if the host composition mounted
+    # one — keeps the automatic listeners and is never disturbed; the
+    # scoped engine never resolves outside this composition). Requires the
+    # optional peer `@deepseek-ai/dsh-compaction-basic` to be installed.
+    # UNSET (the default) inherits the HOST-mounted `ctx.compaction` engine
+    # and its model chain (configured ?? latest-request ?? agent) — i.e.
+    # "follow the session model"; with no host engine, compact() answers a
+    # structured unavailable error. The single-key design keeps ONE place
+    # to set the compaction model for Dasher agents: no second
+    # summarizationModel row to keep in sync.
+    #   config:
+    #     subagentModel: zai/glm-5.2
+    #     harnessDir: ~/.dasher/harness
+    #     refineModel: zai/glm-5.2
+    #     compactModel: zai/glm-5.2
     - id: dashr-tool-presentation
       name: dashr-tool-presentation
 

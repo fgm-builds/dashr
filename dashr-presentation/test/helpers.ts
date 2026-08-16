@@ -69,6 +69,7 @@ export interface Harness {
 export async function setup(
   runtime: ((ctx: Context) => Promise<unknown>) | false,
   config: Config = {},
+  agentRoute?: { provider?: string, model?: string },
 ): Promise<Harness> {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt, {})
@@ -102,6 +103,7 @@ export async function setup(
   const events: { type: string; data: unknown }[] = []
   const dasherAgent = {
     id: SessionId('dasher-agent'),
+    ...agentRoute === undefined ? {} : { options: agentRoute },
     session: {
       header: { cwd: '/workspace' },
       append: (type: string, data: unknown) => { events.push({ type, data }) },

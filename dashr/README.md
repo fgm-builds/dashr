@@ -124,6 +124,15 @@ Every field of the plugin `Config` (schemastery defaults shown):
   awaits the previous cell), so concurrent `run()` calls on one session
   queue rather than interleave; see `test/parallel.spec.ts`. Runs on
   DIFFERENT principals execute on their own kernels concurrently.
+- **What snapshots do NOT carry** (M4-B): the Continual Harness — the
+  presentation-side durable prompt store behind the `dasher:harness` section
+  and the `refine()` binding — lives OUTSIDE the kernel namespace and
+  `snapshotDir`, persisted under its own `harnessDir` by the presentation
+  package. A snapshot/restore cycle therefore never rolls harness entries
+  back (and a harness edit never invalidates a snapshot): the two persistence
+  channels are keyed by the same agent id but are otherwise independent
+  (blueprint §8.4). Anything a cell stores in ordinary variables follows the
+  snapshot rules above as before.
 
 ## Testing
 

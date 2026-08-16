@@ -3,7 +3,8 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { CallId } from '@deepseek-ai/dsh-llm'
-import { FakeCellRuntime, fakeRuntime, runCell, setup } from './helpers.ts'
+import { FakeCellRuntime, fakeRuntime, runCell, setup, setupKernel } from './helpers.ts'
+import type { RlmJsonValue } from '../src/runtime-surface.ts'
 
 /**
  * M3-B rlm()/rlm_await() binding (blueprint §9): the host-plane subagents
@@ -76,7 +77,7 @@ describe('rlm() / rlm_await() binding', () => {
 
     const result = await cell(ctx, agent.agent, 'program')
     expect(result.value.result).toEqual({
-      handle: { run_id: 'stub-spawn-run-1', label: 'worker', provider: 'spawn', local: false },
+      handle: { run_id: 'stub-spawn-run-1', label: 'worker', provider: 'spawn', local: false, model: null },
       awaited: { output: 'child:do the thing', stop_reason: 'completed', structured: null },
       again: { output: null, stop_reason: 'error', structured: null, error: expect.stringContaining('unknown or already-settled') },
     })
@@ -181,4 +182,166 @@ describe('rlm() / rlm_await() binding', () => {
     await new Promise(resolve => setTimeout(resolve, 50))
     expect(disposed).toEqual(['stub-dispose'])
   })
+})
+
+describe('rlm() child-model selection (M4-A three-level priority)', () => {
+  /**
+   * The priority ladder `rlm(model=...) > config.subagentModel > parent
+   * inheritance` reduces to what the start request carries: `agentOptions:
+   * { model }` with the winning value, or NO `agentOptions` key at all —
+   * the omission IS the inheritance tier, because dsh's
+   * `resolveChildAgentOptions` spreads the parent's route only when the
+   * request leaves it unset. Every case below captures the request through
+   * a recording stub and asserts exactly that observable.
+   */
+  interface CapturedStart {
+    label?: unknown
+    agentOptions?: { model?: string }
+    hasAgentOptionsKey: boolean
+  }
+
+  async function admitWith(config: { subagentModel?: string }, kwargs: Record<string, unknown>): Promise<{ handle: RlmJsonValue | undefined, starts: CapturedStart[] }> {
+    // The RAW request objects are kept: key-presence must be observed on
+    // what the bridge actually sent, before any recording layer could
+    // re-add an `agentOptions: undefined` key of its own.
+    const rawStarts: { label?: unknown, agentOptions?: { model?: string } }[] = []
+    const { ctx, agent } = await setup(fakeRuntime, config)
+    await registerStubSubagents(ctx, async (_name, request) => {
+      rawStarts.push(request)
+      return {
+        id: 'stub-model',
+        localAgent: undefined,
+        result: Promise.resolve({ output: [{ type: 'text', text: 'done' }], stopReason: 'completed' }),
+        dispose: () => Promise.resolve(),
+      }
+    })
+    const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
+    let handle: RlmJsonValue | undefined
+    runtime.behavior = async (request) => {
+      const rlm = request.bindings.find(binding => binding.global === 'rlm')!
+      handle = await rlm.functions['__call__']!({ args: ['task'], kwargs })
+      return { logs: [], value: handle }
+    }
+    await cell(ctx, agent.agent, 'program')
+    const starts: CapturedStart[] = rawStarts.map(request => ({
+      label: request.label,
+      agentOptions: request.agentOptions,
+      // Key presence, not truthiness: the bridge omits the field entirely
+      // on the inheritance tier instead of sending an empty object.
+      hasAgentOptionsKey: Object.prototype.hasOwnProperty.call(request, 'agentOptions'),
+    }))
+    return { handle, starts }
+  }
+
+  it('a per-call model kwarg overrides a configured subagentModel', async () => {
+    const { handle, starts } = await admitWith({ subagentModel: 'cfg/default-model' }, { model: 'kwarg/model-x' })
+    expect(starts).toHaveLength(1)
+    expect(starts[0]!.agentOptions).toEqual({ model: 'kwarg/model-x' })
+    expect(starts[0]!.hasAgentOptionsKey).toBe(true)
+    expect(handle).toMatchObject({ model: 'kwarg/model-x' })
+  })
+
+  it('with no kwarg, a configured subagentModel is sent', async () => {
+    const { handle, starts } = await admitWith({ subagentModel: 'cfg/default-model' }, {})
+    expect(starts[0]!.agentOptions).toEqual({ model: 'cfg/default-model' })
+    expect(handle).toMatchObject({ model: 'cfg/default-model' })
+  })
+
+  it('model=None is unspecified and falls through to the configured default', async () => {
+    const { starts } = await admitWith({ subagentModel: 'cfg/default-model' }, { model: null })
+    expect(starts[0]!.agentOptions).toEqual({ model: 'cfg/default-model' })
+  })
+
+  it('with neither kwarg nor config, the start request carries no agentOptions at all (parent inheritance)', async () => {
+    const { handle, starts } = await admitWith({}, {})
+    expect(starts[0]!.hasAgentOptionsKey).toBe(false)
+    expect(starts[0]!.agentOptions).toBeUndefined()
+    expect(handle).toMatchObject({ model: null })
+  })
+
+  it('rejects non-string model values as a result error without starting a child', async () => {
+    let started = 0
+    const { ctx, agent } = await setup(fakeRuntime)
+    await registerStubSubagents(ctx, async () => {
+      started++
+      return {
+        id: 'stub-never',
+        localAgent: undefined,
+        result: Promise.resolve({ output: [{ type: 'text', text: 'done' }], stopReason: 'completed' }),
+        dispose: () => Promise.resolve(),
+      }
+    })
+    const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
+
+    runtime.behavior = async (request) => {
+      const rlm = request.bindings.find(binding => binding.global === 'rlm')!
+      const intModel = await rlm.functions['__call__']!({ args: ['task'], kwargs: { model: 42 } })
+      const listModel = await rlm.functions['__call__']!({ args: ['task'], kwargs: { model: ['a', 'b'] } })
+      const emptyModel = await rlm.functions['__call__']!({ args: ['task'], kwargs: { model: '' } })
+      return { logs: [], value: { intModel, listModel, emptyModel } }
+    }
+
+    const result = await cell(ctx, agent.agent, 'program')
+    expect(result.value.result).toEqual({
+      intModel: { error: 'rlm() model must be a non-empty string or None' },
+      listModel: { error: 'rlm() model must be a non-empty string or None' },
+      // O1 (M4-A acceptance): the empty string is a hand-slip, not a model id —
+      // the kwarg layer rejects it exactly like the config boundary does.
+      emptyModel: { error: 'rlm() model must be a non-empty string or None' },
+    })
+    expect(started).toBe(0)
+  })
+
+  it('rejects an empty-string subagentModel at the config boundary (plugin mount fails loudly)', async () => {
+    await expect(setup(fakeRuntime, { subagentModel: '' })).rejects.toThrow('subagentModel must be a non-empty string')
+  })
+})
+
+describe('rlm_await cancellation chain (real kernel, M4-A N2)', () => {
+  it('an outer abort while the cell is blocked in rlm_await settles the cell and keeps the run disposable', async () => {
+    const { ctx, agent } = await setupKernel()
+    let startSignal: AbortSignal | undefined
+    const disposed: string[] = []
+    await registerStubSubagents(ctx, async (_name, request) => {
+      startSignal = request.signal
+      return {
+        id: 'stub-hanging',
+        localAgent: undefined,
+        // Never settles: the cell stays genuinely blocked inside the kernel.
+        result: new Promise(() => {}),
+        dispose: () => { disposed.push('stub-hanging'); return Promise.resolve() },
+      }
+    })
+
+    // One cell, both calls: admission (non-blocking) and then the wait.
+    // The start request carries THIS cell's exec signal, so the same abort
+    // that breaks the wait is the cancellation signal a real provider would
+    // use to cancel the published child.
+    const outer = new AbortController()
+    setTimeout(() => { outer.abort('turn cancelled') }, 300)
+    const startedAt = Date.now()
+    const blocked = await runCell(ctx, [
+      'handle = await rlm("hang task")',
+      'await rlm_await(handle["run_id"])',
+    ].join('\n'), { agent: agent.agent, signal: outer.signal })
+    const elapsedMs = Date.now() - startedAt
+    expect(blocked.isError).toBe(true)
+    if (!blocked.isError) throw new Error('expected the blocked cell to fail')
+    // The chain (outer signal → run-scoped abort → kernel interrupt ladder)
+    // must settle the cell as the CODE_RUN_FAILED abort taxonomy, quickly —
+    // a broken chain would ride the full run timeout instead.
+    expect(blocked.error.info).toMatchObject({ name: 'DasherRunFailedError', code: 'CODE_RUN_FAILED' })
+    expect((blocked.content[0] as { text: string }).text).toContain('code run failed (abort)')
+    expect(elapsedMs).toBeLessThan(10_000)
+
+    // The cancellation reached the subagent request itself: a real provider
+    // cancels the published child on this signal.
+    expect(startSignal?.aborted).toBe(true)
+
+    // The aborted rlm_await did NOT take the run's result, so the run
+    // stays tracked and the session-disposal path still reaches it.
+    ctx.events.emit('agent/disposed', { agent: { id: 'dasher-agent' } })
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(disposed).toEqual(['stub-hanging'])
+  }, 30_000)
 })

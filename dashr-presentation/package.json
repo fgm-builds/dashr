@@ -1,6 +1,6 @@
 {
   "name": "dashr-tool-presentation",
-  "description": "Agent-plane presentation plugin for the DASHR RLM runtime: the run_cell transport, Python SDK rendering, and direct-call collapse (blueprint §7.4)",
+  "description": "Agent-plane presentation plugin for the DASHR RLM runtime: the run_cell transport, Python SDK rendering, and direct-call collapse (blueprint \u00a77.4)",
   "version": "0.1.0",
   "type": "module",
   "main": "lib/index.js",
@@ -36,10 +36,14 @@
     "@deepseek-ai/dsh-llm": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-scope": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-tools": "^0.1.0-rc.6",
-    "dashr-code-runtime-ipython": "^0.1.0"
+    "dashr-code-runtime-ipython": "^0.1.0",
+    "@deepseek-ai/dsh-compaction-basic": "^0.1.0-rc.6"
   },
   "peerDependenciesMeta": {
     "dashr-code-runtime-ipython": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-compaction-basic": {
       "optional": true
     }
   },
@@ -54,6 +58,8 @@
     "@deepseek-ai/dsh-agent-tool-presentation": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-code-runtime": "0.1.0-rc.6",
     "@deepseek-ai/dsh-code-runtime-worker-thread": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-compaction": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-compaction-basic": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-fs-local": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-invariants": "0.1.0-rc.6",
     "@deepseek-ai/dsh-llm": "0.1.0-rc.6",
