@@ -9,13 +9,15 @@ upstream/
 
 # --- graphify knowledge-graph output ---
 graphify-out/
+.graphifyignore
 
 # --- scratch notes / disposable artifacts ---
 .scratch/
 
-# --- internal dev reports and raw docs ---
+# --- internal dev artifacts ---
 dev/
-docs/
+
+# "./docs/" is assets, references, any others sit along with the repo
 
 # --- build output ---
 dist/

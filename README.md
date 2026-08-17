@@ -1,4 +1,4 @@
-# Dashr: RLM Plugin for DSH
+# Dashr: RLM Plugin for `dsh`
 
 <p align="center">
   <a href="https://github.com/fgm-builds/dashr/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License" /></a>
@@ -16,7 +16,7 @@
 curl -fsSL https://raw.githubusercontent.com/fgm-builds/dashr/main/install.sh | bash
 ```
 
-### Alternative: DSH Plugin CLI (NPM)
+### Alternative: `dsh` Plugin CLI (`npm`)
 
 ```bash
 dsh plugin --profile web add --config.auto-install-peers=false dsh-rlm-mode
@@ -30,9 +30,13 @@ dsh plugin --profile web add --config.auto-install-peers=false dsh-rlm-mode
 
 ## 📖 Overview
 
-DeepSeek Harness (`dsh`): Everything is a plugin (Cordis framework).  
-Prime Agent: Context is variable (RLM paradigm).  
+[DeepSeek Harness (`dsh`)](https://github.com/deepseek-ai/deepseek-harness): Everything is a plugin (Cordis framework).  
+[Prime Agent](https://github.com/primeintellect-ai/prime): Context is variable (RLM paradigm).  
 **Why not both?** That's `dsh` in RLM mode — that's **Dashr**.
+
+<p align="center">
+  <img src="./docs/dsh-webUI-with-rlm-mode.png" alt="Dashr (RLM mode) running in DeepSeek Harness Web UI" width="95%" />
+</p>
 
 **Dashr** is an open-source plugin for the [DeepSeek Harness (`dsh`)](https://github.com/deepseek-ai/deepseek-harness) agent runtime. It brings **RLM (Recursive Language Models)** and the **"Context is Variable"** paradigm to `dsh`, registering a dedicated `rlm-mode` agent preset upon installation.
 
