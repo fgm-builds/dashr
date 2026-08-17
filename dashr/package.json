@@ -1,7 +1,7 @@
 {
   "name": "dsh-rlm-mode",
   "description": "RLM Mode for DeepSeek Harness (dsh): one persistent Python kernel per agent session \u2014 schema-driven tools.* bindings, sub-agents, harness, and snapshots",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",

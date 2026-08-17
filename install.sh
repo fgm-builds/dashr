@@ -16,7 +16,7 @@ set -euo pipefail
 
 DSH_PROFILE="${DSH_PROFILE:-web}"
 DSH_HOME_DIR="${DSH_HOME:-$HOME/.dsh}"
-DASHR_VERSION="${DASHR_VERSION:-v0.1.0}"
+DASHR_VERSION="${DASHR_VERSION:-v0.1.1}"
 DASHR_REPO="${DASHR_REPO:-https://github.com/fgm-builds/dashr}"
 DASHR_SRC="${DASHR_SRC:-}"
 

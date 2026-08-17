@@ -1390,6 +1390,7 @@ export function apply(ctx: Context, config: Config): void {
           if (engine === undefined) {
             return { error: 'recencyWindowTokens is set but the recency engine did not become available: the host composition must provide llm, tokenMeter, and sessions for it to load' }
           }
+          logger.info('dsh-rlm-mode: recency engine mounted (ceiling %d tokens, tail %d tokens, summarizer %s/%s)', recencyWindowTokens, retainTokens, provider, model)
           return { engine, target: { provider, model } }
         } catch (error: unknown) {
           return { error: `recencyWindowTokens is set but the recency engine could not be mounted: ${error instanceof Error ? error.message : String(error)} (is the optional peer @deepseek-ai/dsh-compaction-basic installed next to dsh-rlm-mode?)` }
