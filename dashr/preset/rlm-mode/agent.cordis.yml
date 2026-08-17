@@ -78,3 +78,17 @@
       name: dsh-rlm-mode
       config:
         python: !!js process.env.DASHR_KERNEL_PYTHON ?? 'python3'
+        # Context Recency Window (Feature 1, OPT-IN — both keys commented
+        # out by default so behavior matches a plain dsh deployment exactly).
+        # Uncomment recencyWindowTokens, retainTokens, AND add a full
+        # "provider/model" compactModel above to enable: when the session's
+        # measured pressure exceeds the ceiling, the recency engine compacts
+        # with the retainTokens tail — independent of the model's own context
+        # window (the upstream 0.8 x model-window threshold stays active as a
+        # second trigger arm; whichever ceiling is lower fires first).
+        # ~500K tokens = 1-2 MB of mixed text; tune per deployment.
+        # recencyWindowTokens: 500000
+        # Absolute post-compaction retained tail (upstream retainTokens,
+        # passed through). Must stay below recencyWindowTokens — the recency
+        # engine machine-checks that invariant at mount.
+        # retainTokens: 50000

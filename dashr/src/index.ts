@@ -161,6 +161,29 @@ export interface Config extends RuntimeConfig {
    * when set.
    */
   compactModel?: string
+  /**
+   * The Context Recency Window (Feature 1): an absolute token ceiling for
+   * the passive pressure compaction. When set, a `RecencyAwareCompactionEngine`
+   * (a `BasicCompactionEngine` subclass) mounts under `ctx.isolate('compaction')`
+   * with `auto: true` — its `agent/pre-step` check compacts whenever the
+   * session's measured pressure exceeds this value, regardless of how much
+   * headroom the model's own context window still has. The upstream
+   * ratio threshold (0.8 × model window) stays active as a second,
+   * independent trigger arm: whichever ceiling is lower fires first.
+   * Requires `compactModel` in the full `'provider/model'` form (the
+   * engine mounts before any agent exists to pair a bare model id) and an
+   * absolute `retainTokens`. Must be a positive integer when set; absent =
+   * upstream behavior only.
+   */
+  recencyWindowTokens?: number
+  /**
+   * The absolute post-compaction retained tail, in tokens, for the recency
+   * engine (upstream's own `retainTokens` key passed through). Kept below
+   * `recencyWindowTokens` — the invariant the engine machine-checks at
+   * mount. Only meaningful with `recencyWindowTokens`; must be a positive
+   * integer when set.
+   */
+  retainTokens?: number
 }
 
 /** Runtime schema. */
@@ -172,6 +195,8 @@ export const Config: z<Config> = z.intersect([
     harnessDir: z.string(),
     refineModel: z.string(),
     compactModel: z.string(),
+    recencyWindowTokens: z.natural().min(1),
+    retainTokens: z.natural().min(1),
   }),
 ])
 
@@ -333,6 +358,24 @@ export function resolveCompactModel(value: string | undefined): string | undefin
   if (value === undefined) return undefined
   if (typeof value !== 'string' || value.length === 0) {
     throw new Error(`dsh-rlm-mode: compactModel must be a non-empty string when set, got ${JSON.stringify(value)}`)
+  }
+  return value
+}
+
+/** Resolve the Context Recency Window at the config boundary (positive integer or absent). */
+export function resolveRecencyWindowTokens(value: number | undefined): number | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+    throw new Error(`dsh-rlm-mode: recencyWindowTokens must be a positive integer when set, got ${JSON.stringify(value)}`)
+  }
+  return value
+}
+
+/** Resolve the recency engine's retained tail at the config boundary (positive integer or absent). */
+export function resolveRetainTokens(value: number | undefined): number | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+    throw new Error(`dsh-rlm-mode: retainTokens must be a positive integer when set, got ${JSON.stringify(value)}`)
   }
   return value
 }
@@ -1214,6 +1257,23 @@ export function apply(ctx: Context, config: Config): void {
   const harnessDir = resolveHarnessDir(config.harnessDir)
   const refineModel = resolveRefineModel(config.refineModel)
   const compactModel = resolveCompactModel(config.compactModel)
+  const recencyWindowTokens = resolveRecencyWindowTokens(config.recencyWindowTokens)
+  const retainTokens = resolveRetainTokens(config.retainTokens)
+  // The recency engine mounts EAGERLY (its pre-step listener must exist
+  // before any session runs), so its summarizer route cannot pair a bare
+  // model id with "the first calling agent" — the full form is required,
+  // and the engine's selector needs an absolute tail to price.
+  if (recencyWindowTokens !== undefined) {
+    if (compactModel === undefined) {
+      throw new Error('dsh-rlm-mode: recencyWindowTokens requires compactModel — the recency engine summarizes with it and mounts before any agent exists to inherit a route from')
+    }
+    if (!compactModel.includes('/')) {
+      throw new Error(`dsh-rlm-mode: recencyWindowTokens requires the full "provider/model" compactModel form (bare model ids pair with the first calling agent, which does not exist at eager mount); got ${JSON.stringify(compactModel)}`)
+    }
+    if (retainTokens === undefined) {
+      throw new Error('dsh-rlm-mode: recencyWindowTokens requires retainTokens — the recency selector prices a concrete post-compaction tail')
+    }
+  }
 
   // The wait is the loud failure: a preset row still pending on `rlmRuntime`
   // is what the preset mount audit reports as an unusable row, naming this
@@ -1283,22 +1343,63 @@ export function apply(ctx: Context, config: Config): void {
     })
     runtimeCtx.effect(() => () => { void rlmRuns.disposeAll() }, 'dashr rlm run disposal')
 
-    // The compactModel tier's DASHR-scoped engine (design A): an
-    // isolation-labelled child context — `ctx.isolate('compaction')` — so the
-    // provide can never collide with a host-level engine (cordis keys service
-    // registration by isolation label; a same-label provide throws), and the
-    // scoped instance never resolves outside this composition. The engine is
-    // mounted lazily on the FIRST compact() call: the bare-model form needs a
-    // provider then (the first calling agent's), and the dynamic import keeps
-    // the optional peer unloaded for deployments that never set compactModel.
-    // `auto: false` is load-bearing: the host engine keeps the automatic
-    // pressure/overflow listeners for this agent, and a scoped engine with
-    // auto:true would double-fire them.
+    // The compactModel tier's DASHR-scoped engine (design A), and Feature 1's
+    // Context Recency Window engine: an isolation-labelled child context —
+    // `ctx.isolate('compaction')` — so the provide can never collide with a
+    // host-level engine (cordis keys service registration by isolation
+    // label; a same-label provide throws), and the scoped instance never
+    // resolves outside this composition. Both share ONE engineScope and ONE
+    // mount promise: the recency engine mounts EAGERLY (its pre-step
+    // listener must exist before any session runs), and the design-A lazy
+    // path reuses it when it is already there.
+    //
+    // Engine choice:
+    //  - `recencyWindowTokens` set → `RecencyAwareCompactionEngine` with
+    //    `auto: true` + the absolute `retainTokens` tail. Its pre-step check
+    //    adds the recency arm to the host engine's own ratio arm; the first
+    //    compaction drops the measurement under both thresholds, so the
+    //    host engine's listener no-ops — the min() semantics fall out of
+    //    the two sequential checks, no coordination needed.
+    //  - design A only → upstream `BasicCompactionEngine` with `auto: false`
+    //    (the host engine keeps the automatic listeners; the scoped engine
+    //    serves explicit compact() calls), mounted lazily on the FIRST
+    //    compact() call because the bare-model form needs a provider then
+    //    (the first calling agent's).
+    // Both branches keep the optional peer unloaded until needed: the
+    // recency engine lives in its own module that is only dynamically
+    // imported here.
+    const engineScope = runtimeCtx.isolate('compaction')
+    let engineMount: Promise<ScopedCompactionOutcome> | undefined
+    // The eager recency mount (validated above: full provider/model form).
+    if (recencyWindowTokens !== undefined && compactModel !== undefined && retainTokens !== undefined) {
+      const slash = compactModel.indexOf('/')
+      const provider = compactModel.slice(0, slash)
+      const model = compactModel.slice(slash + 1)
+      engineMount = (async (): Promise<ScopedCompactionOutcome> => {
+        try {
+          const { RecencyAwareCompactionEngine } = await import('./compaction/recency-engine.js')
+          const fiber = engineScope.plugin(RecencyAwareCompactionEngine, {
+            summarizationProvider: provider,
+            summarizationModel: model,
+            retainTokens,
+            recencyWindowTokens,
+            auto: true,
+          })
+          await fiber
+          const engine = engineScope.get('compaction') as DASHRCompactionSurface | undefined
+          if (engine === undefined) {
+            return { error: 'recencyWindowTokens is set but the recency engine did not become available: the host composition must provide llm, tokenMeter, and sessions for it to load' }
+          }
+          return { engine, target: { provider, model } }
+        } catch (error: unknown) {
+          return { error: `recencyWindowTokens is set but the recency engine could not be mounted: ${error instanceof Error ? error.message : String(error)} (is the optional peer @deepseek-ai/dsh-compaction-basic installed next to dsh-rlm-mode?)` }
+        }
+      })().then((outcome) => {
+        if ('error' in outcome) logger.warn(outcome.error)
+        return outcome
+      })
+    }
     const scopedCompaction = compactModel === undefined ? undefined : (() => {
-      // Captured once, non-optional inside this branch: the isolation label
-      // this composition's scoped engine provides (and resolves) under.
-      const engineScope = runtimeCtx.isolate('compaction')
-      let mounted: Promise<ScopedCompactionOutcome> | undefined
       return (agent: Agent): Promise<ScopedCompactionOutcome> => {
         const slash = compactModel.indexOf('/')
         const provider = slash >= 0
@@ -1311,7 +1412,12 @@ export function apply(ctx: Context, config: Config): void {
         if (provider === undefined) {
           return Promise.resolve({ error: `compactModel ${JSON.stringify(compactModel)} is a bare model id and this agent has no provider to pair it with; use the "provider/model" form or configure the agent's provider` })
         }
-        mounted ??= (async (): Promise<ScopedCompactionOutcome> => {
+        engineMount ??= (async (): Promise<ScopedCompactionOutcome> => {
+          // The eager recency mount may have completed between checks.
+          const existing = engineScope.get('compaction') as DASHRCompactionSurface | undefined
+          if (existing !== undefined) {
+            return { engine: existing, target: { provider, model } }
+          }
           try {
             const { BasicCompactionEngine } = await import('@deepseek-ai/dsh-compaction-basic')
             // A proper plugin fiber, NOT a bare constructor call: the class's
@@ -1336,7 +1442,7 @@ export function apply(ctx: Context, config: Config): void {
             return { error: `compactModel is set but the DASHR-scoped compaction engine could not be mounted: ${error instanceof Error ? error.message : String(error)} (is the optional peer @deepseek-ai/dsh-compaction-basic installed next to dsh-rlm-mode?)` }
           }
         })()
-        return mounted
+        return engineMount
       }
     })()
 

@@ -432,6 +432,33 @@ and on the expected `busy` falls through to `compactIfNeeded('pressure')` —
 the same policy entry the engine itself runs between steps: below threshold an
 honest `{status: 'no-op'}`, above it the selected range is summarized NOW and
 the model's next request in the SAME turn already rides the compacted history.
+#### Context Recency Window (Feature 1)
+
+`recencyWindowTokens` adds an operator-set, model-independent trigger on top
+of the upstream ratio threshold. The preset ships it **commented out** (opt-in;
+default behavior matches a plain dsh deployment exactly). Enable it in the
+preset row with a full-form `compactModel`:
+
+```yaml
+config:
+  compactModel: deepseek/deepseek-v4-flash   # full provider/model form
+  recencyWindowTokens: 500000                # ~1-2 MB of mixed text
+  retainTokens: 50000                        # post-compaction tail
+```
+
+Semantics: at every agent step the session's measured pressure is compared
+against BOTH ceilings — `recencyWindowTokens` and the upstream
+`thresholdRatio × model contextWindow` — and whichever is lower fires first.
+On a 250K-context model with a 500K recency ceiling the upstream ~200K
+threshold triggers; on a 1M model the 500K recency ceiling triggers. When
+recency fires, the engine selects the range from the newest surface node
+backward until `retainTokens` are kept (never splitting a tool-call/result
+pair) and hands it to the upstream `compactRegion` — region validation, the
+durable compaction lock, summarization, and the surface replacement are all
+native. Below the recency ceiling the check delegates wholesale to the
+upstream engine; `context-overflow` recovery keeps its maximum-reduction
+semantics untouched.
+
 Success reports `{status: 'compacted', path, compaction_id, summary_seq,
 shadowed_items, shadowed_tokens, compact_model}`; non-busy failures are
 structured `error` fields.
@@ -445,6 +472,8 @@ structured `error` fields.
 | `harnessDir` | unset | Root for the Continual Harness store: one `harness.json` per agent, atomically written, restored by the next composition of the same agent id. Unset = memory-only (dies with the composition). Must be a non-empty string when set. |
 | `refineModel` | unset | Aux model route for `refine()`: `'provider/model'` explicit, a bare model id paired with the calling agent's provider, or unset for the agent's own route. Must be a non-empty string when set. |
 | `compactModel` | unset | Summarization model for `compact()`: mounts a DASHR-scoped `BasicCompactionEngine` (design A — see above) under `ctx.isolate('compaction')` with this route and `auto: false`. Unset inherits the host engine and its model chain. Requires the optional peer `@deepseek-ai/dsh-compaction-basic` when set. Must be a non-empty string when set. |
+| `recencyWindowTokens` | unset | **Context Recency Window** (Feature 1): an absolute token ceiling for passive pressure compaction. When set, a `RecencyAwareCompactionEngine` (a `BasicCompactionEngine` subclass) mounts under `ctx.isolate('compaction')` with `auto: true` — every agent step checks the session's measured pressure and compacts when it exceeds this ceiling, independent of the model's own context window. The upstream `thresholdRatio × contextWindow` threshold stays active as a second trigger arm (whichever ceiling is lower fires first). Requires `compactModel` in the full `'provider/model'` form (the engine mounts before any agent exists to pair a bare model id) and an absolute `retainTokens`. Must be a positive integer when set. |
+| `retainTokens` | unset | The absolute post-compaction retained tail in tokens (upstream's own key, passed through) for the recency engine. Must stay below `recencyWindowTokens` — the engine machine-checks that invariant at mount. Only meaningful with `recencyWindowTokens`; must be a positive integer when set. |
 
 Dependencies note: `@deepseek-ai/dsh-compaction-basic` is an OPTIONAL peer
 dependency (dev-installed for the design-A tests). Nothing loads it unless
