@@ -61,25 +61,42 @@ While both **RLM Mode (Dashr)** and `dsh`'s built-in **Code Mode** provide a cod
 
 ## 💡 RLM
 
-Reference: [arXiv:2512.24601](https://arxiv.org/abs/2512.24601)
+Reference: *Recursive Language Models* ([arXiv:2512.24601](https://arxiv.org/abs/2512.24601))
 
-### 1. Context is Variable (Stateful Kernel)
+### Key Empirical Findings & Claims
+
+According to foundational RLM research (MIT / Stanford / Open MIND, 2025), treating context as an external REPL variable and recursively delegating subtasks delivers significant empirical advantages:
+
+1. **1–2 Orders of Magnitude Context Scaling**:  
+   Enables LLMs with ~250K context limits to effectively process inputs scaling to **10M+ tokens** (a **40×–100× / 2 orders of magnitude** expansion beyond physical context windows) while avoiding context rot.
+2. **Recursive Sub-Agent Task Decomposition**:  
+   Instead of feeding massive prompts into the neural network directly, the root model writes code to programmatically inspect, slice, and spawn recursive sub-agents (`rlm()`) on small, bounded snippets—delegating granular processing to sub-agents.
+3. **Resilience on Information-Dense Benchmarks**:  
+   On complex multi-hop reasoning tasks (e.g. *OOLONG-Pairs*), standard frontier LLMs fail catastrophically (<0.1% F1), whereas RLM achieves **58.0% F1 (GPT-5)** and **23.1% F1 (Qwen3-Coder)**.
+4. **Token & Cost Efficiency**:  
+   Outperforms standard long-context ingestion and summarization baselines by up to **2× performance** at comparable or lower median query costs (e.g., $0.99 for RLM vs. $1.50–$2.75 for direct ingestion on 6–11M token workloads in *BrowseComp-Plus*).
+5. **Model-Agnostic Inference-Time Scaling**:  
+   Operates strictly at inference time across both frontier closed (GPT-5) and open models (Qwen3-Coder-480B) with zero model fine-tuning.
+
+### Architecture
+
+#### 1. Context is Variable (Stateful Kernel)
 In standard agent loops, reading large files or computing complex payloads dumps raw output directly into the conversation history. In Dashr:
 - State and computation persist inside a live IPython kernel session.
 - Intermediate variables survive across cells without re-entering the prompt.
 - Tools are exposed as first-class Python functions (`tools.<name>()`). Intermediate execution data never round-trips through the prompt.
 
-### 2. Recursive Sub-Agents (`rlm()`)
+#### 2. Recursive Sub-Agents (`rlm()`)
 The core mechanism of **Recursive Language Models**:
 - For token-heavy or exploratory subtasks, the agent spawns child agents (`handle = rlm("Investigate repository history")`).
 - Sub-agents operate recursively in their own isolated context loops.
 - When finished, `rlm_await(handle)` collects only the final distilled summary back into the parent kernel.
 
-### 3. Sliding Context Window
+#### 3. Sliding Context Window
 - Even without spawning sub-agents, Dashr maintains a bounded sliding context window over recent turns.
 - Prevents context degradation and eliminates context window saturation on long workflows.
 
-### 4. Compaction & Summarization
+#### 4. Compaction & Summarization
 - Earlier turns that fall outside the active sliding window are automatically compressed into structured summaries (`compact()`).
 - High-level progress, key decisions, and operating guidance are preserved in a dynamic harness (`refine()`) and reinjected into the prompt.
 
