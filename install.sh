@@ -16,7 +16,7 @@ set -euo pipefail
 
 DSH_PROFILE="${DSH_PROFILE:-web}"
 DSH_HOME_DIR="${DSH_HOME:-$HOME/.dsh}"
-DASHR_VERSION="${DASHR_VERSION:-v0.1.1}"
+DASHR_VERSION="${DASHR_VERSION:-main}"
 DASHR_REPO="${DASHR_REPO:-https://github.com/fgm-builds/dashr}"
 DASHR_SRC="${DASHR_SRC:-}"
 
@@ -36,6 +36,7 @@ NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
 [ "$NODE_MAJOR" -ge 22 ] || step "warning: node $(node -v) is below the recommended 22; dsh may misbehave"
 command -v python3 >/dev/null || die "python3 not found"
 command -v curl    >/dev/null || command -v git >/dev/null || die "need curl or git"
+command -v pnpm   >/dev/null 2>&1 || { step "pnpm not found — installing (required by dsh plugin add)"; npm install -g pnpm || die "pnpm install failed"; }
 
 # ------------------------------------------------------ 2. dsh (if missing)
 if command -v dsh >/dev/null 2>&1; then
@@ -84,6 +85,26 @@ fi
 
 # ---------------------------------------------------- 4. plugin install
 step "4/5 installing the dsh-rlm-mode plugin"
+# Pre-seed the profile's pnpm policy BEFORE `dsh plugin add` forwards to pnpm:
+#   - allowBuilds.zeromq: false — zeromq ships prebuilt binaries, its build
+#     script is an optional source-compile fallback. pnpm v10+ ignoring it is
+#     harmless, BUT it exits non-zero and makes `dsh plugin add` report a
+#     failure (skipping its bundle reconciliation → the plugin's
+#     cordis.patch.yml never loads). Declaring it false makes the ignore
+#     explicit and non-fatal.
+PROFILE_DIR="$DSH_HOME_DIR/profiles/$DSH_PROFILE"
+mkdir -p "$PROFILE_DIR"
+if [ ! -f "$PROFILE_DIR/pnpm-workspace.yaml" ]; then
+  printf 'allowBuilds:\n  zeromq: false\n' > "$PROFILE_DIR/pnpm-workspace.yaml"
+else
+  grep -q '^allowBuilds:' "$PROFILE_DIR/pnpm-workspace.yaml" \
+    || printf 'allowBuilds:\n  zeromq: false\n' >> "$PROFILE_DIR/pnpm-workspace.yaml"
+  sed -i 's|^  zeromq: set this to true or false$|  zeromq: false|' "$PROFILE_DIR/pnpm-workspace.yaml"
+fi
+# Drop pnpm's registry metadata cache so `@latest` resolves the just-published
+# version instead of a cached older one (pnpm's own cache TTL can lag a fresh
+# publish by minutes-to-hours).
+rm -rf "${XDG_CACHE_HOME:-$HOME/.cache}/pnpm" 2>/dev/null || true
 PRESET_SRC=""
 if "$DSH" plugin --profile "$DSH_PROFILE" add --config.auto-install-peers=false dsh-rlm-mode@latest; then
   info "installed dsh-rlm-mode from the npm registry"

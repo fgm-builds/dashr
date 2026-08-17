@@ -1,7 +1,7 @@
 {
   "name": "dsh-rlm-mode",
   "description": "RLM Mode for DeepSeek Harness (dsh): one persistent Python kernel per agent session — schema-driven tools.* bindings, sub-agents, harness, and snapshots",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -14,11 +14,13 @@
       "types": "./lib/py-sdk.d.ts",
       "default": "./lib/py-sdk.js"
     },
+    "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
   "files": [
     "lib",
-    "preset"
+    "preset",
+    "cordis.patch.yml"
   ],
   "scripts": {
     "build": "tsdown",
@@ -28,6 +30,11 @@
     "kernel:venv": "uv venv .venv-kernel --python 3.11 && uv pip install --python .venv-kernel/bin/python ipykernel dill"
   },
   "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
   "engines": {
     "node": ">=22.18"
   },
