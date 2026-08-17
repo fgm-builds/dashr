@@ -44,9 +44,9 @@ Instead of paying massive token costs on every round-trip tool call in standard 
 
 ---
 
-## 📊 Comparison: RLM Mode (Dashr) vs. Code Mode (`dsh` built-in)
+## 📊 RLM Mode (Dashr) vs. Code Mode (`dsh` built-in)
 
-While both **RLM Mode (Dashr)** and `dsh`'s built-in **Code Mode** enable programmatic multi-tool orchestration through code generation, they differ fundamentally in execution runtime, state persistence, and context efficiency:
+While both **RLM Mode (Dashr)** and `dsh`'s built-in **Code Mode** provide a code-first interface for programmatic tool orchestration, they differ fundamentally in language ecosystem, kernel persistence, and recursive capabilities:
 
 | Dimension | `dsh` Built-in Code Mode | RLM Mode (Dashr Plugin) | Highlight & Advantage |
 |---|---|---|---|
@@ -54,10 +54,8 @@ While both **RLM Mode (Dashr)** and `dsh`'s built-in **Code Mode** enable progra
 | **Trigger & Orchestration** | Programmatic Code Execution (Multi-tool script per turn) | Programmatic Code Execution (Multi-tool script per turn) | 🤝 Both collapse multiple sequential tool calls into a single code execution step. |
 | **Execution Language** | TypeScript / JavaScript | **Python** (IPython 3.10+) | 🐍 Full access to Python's data science, AST analysis, and AI tooling ecosystem (`pandas`, `numpy`, etc.). |
 | **Backend & Kernel Layer** | Ephemeral Node.js Sandbox / One-shot runner | **Persistent IPython Kernel** (ZeroMQ + Jupyter Protocol) | ⚡ Dashr maintains a dedicated, persistent kernel per session. Variables, imports, and objects survive across turns. |
-| **Context Overhead ("Context is Variable")** | Intermediate tool outputs round-trip through prompt history | **In-memory variable storage**; only explicit output enters prompt | 📉 Massive token savings (up to 90%+). Large files, DataFrames, and raw payloads stay in kernel RAM instead of polluting the context window. |
-| **Recursive Delegation** | Standard sequential sub-agent tool call | **In-kernel `rlm()` / `rlm_await()` sub-agents** | 🔀 Child agents run in isolated sub-loops and return only distilled summaries back into parent Python variables. |
+| **Functional Recursive Delegation** | Framework-level Sub-Agent Tool Call | **Native `rlm()` Function Call (Arbitrary Recursion Depth)** | 🔀 Standardized as a zero-friction Python function (`rlm()`). Sub-agents can recursively spawn Level 2+ sub-agents with arbitrary depth, returning results directly into Python variables. |
 | **State Snapshot & Revival** | Stateless between restarts | **Full Namespace Snapshot (`dill`)** | 💾 Kernel state can be serialized and restored across session restarts. |
-| **Dynamic Memory & Compaction** | Standard context truncation / FIFO sliding window | **Dynamic Harness (`refine()`) & Compaction (`compact()`)** | 🧠 Actively compresses evicted turns into operating guidance, retaining long-term trajectory. |
 
 ---
 
