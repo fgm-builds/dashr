@@ -1,24 +1,19 @@
-# DASHR bundle patch: one isolated group on the profile plane, mounting the
-# stateful kernel provider + run_cell presentation — the same dashr-kernel
-# group the rlm-mode agent preset mounts (preset/rlm-mode/agent.cordis.yml).
-# The full RLM Mode stack (standard-composition include + persona patch) is
-# delivered by the rlm-mode preset, localized by install.sh.
+# DASHR bundle patch: declares dsh-rlm-mode as a DSH bundle so `dsh plugin
+# add` reconciles it into the profile's bundle list — the marketplace-presence
+# hook. This file must remain a top-level YAML array to satisfy the bundle
+# loader, but it intentionally mounts NOTHING on the profile plane.
 #
-# Kernel Python defaults to `python3` (the plugin's config default). If your
-# ipykernel lives elsewhere, override it from your profile's own
-# cordis.patch.yml:
+# The stateful kernel provider + run_cell presentation live ONLY in the
+# rlm-mode agent preset (preset/rlm-mode/agent.cordis.yml), which mounts the
+# `dashr-kernel` group on the AGENT plane under an entry-local
+# `isolate: rlmRuntime` realm — one private kernel per session.
 #
-#   - id: dashr-kernel
-#     config:
-#       - id: dsh-rlm-mode
-#         config:
-#           python: /path/to/kernel/python
-- insert:
-    - id: dashr-kernel
-      name: cordis:group
-      group: true
-      isolate:
-        rlmRuntime: true
-      config:
-        - id: dsh-rlm-mode
-          name: dsh-rlm-mode
+# Mounting `dashr-kernel` here on the profile plane as well would register the
+# same `rlmRuntime` service twice — once process-global, once per-session —
+# and `dsh-agent-presets` rejects the preset mount as a leaked process-global
+# service ("the second mount of this preset collides with the first"), which
+# makes RLM Mode unselectable in the Web UI.
+#
+# A future split into a host-plane daemon (process pool / lifecycle) + a
+# per-session kernel worker would mount the daemon here.
+[]

@@ -40,7 +40,7 @@ dsh plugin --profile web add --config.auto-install-peers=false dsh-rlm-mode
 
 **Dashr** is an open-source plugin for the [DeepSeek Harness (`dsh`)](https://github.com/deepseek-ai/deepseek-harness) agent runtime. It brings **RLM（Recursive Language Models：递归自调用）** and the **Context as Variables（上下文即变量）** paradigm to `dsh`, registering a dedicated `rlm-mode` agent preset upon installation.
 
-Instead of paying massive token costs on every round-trip tool call in standard multi-turn chat, Dashr equips the agent with a **stateful, persistent Python kernel（持久化内核）**. The agent writes self-contained Python programs per cell, manipulating context, tools, and memory as native variables via the **Python Kernel Unified Tool Calling Interface（统一的代码化工具调用界面）**.
+Instead of paying massive token costs on every round-trip tool call in standard multi-turn chat, Dashr equips the agent with a **stateful, persistent Python kernel（持久化内核）**. The agent writes self-contained Python programs per cell, manipulating context, tools, and memory as native variables via the **Python Kernel Unified Tool Calling（统一的代码化工具调用）**.
 
 ---
 
@@ -64,7 +64,7 @@ Reference: *Recursive Language Models* (MIT/Stanford/Open MIND, 2025, [arXiv:251
 In standard agent loops, reading large files or computing complex payloads dumps raw output directly into the conversation history. In Dashr:
 - State and computation persist inside a live IPython kernel session.
 - Intermediate variables survive across cells without re-entering the prompt.
-- **Python Kernel Unified Tool Calling Interface（统一的代码化工具调用界面）**: Tools are exposed as first-class Python functions (`tools.<name>()`). Intermediate execution data never round-trips through the prompt.
+- **Python Kernel Unified Tool Calling（统一的代码化工具调用）**: Tools are exposed as first-class Python functions (`tools.<name>()`). Intermediate execution data never round-trips through the prompt.
 
 #### 2. Recursive Sub-Agents（`rlm()`）
 The core mechanism of **RLM**:
@@ -99,14 +99,11 @@ While both **RLM Mode (Dashr)** and `dsh`'s built-in **Code Mode** provide a cod
 
 ## ✨ Features
 
-- 🐍 **Persistent IPython Kernel（持久化 IPython 内核）** — One stateful kernel session per conversation. Variables, imports, and connections persist across cells.
-- ⚡ **Dynamic Tool Binding / Python Kernel Unified Tool Calling Interface（统一的代码化工具调用界面）** — Zero hardcoded tool adapters. At startup, Dashr dynamically binds all tools registered in the `dsh` host (`bash`, `web_search`, file operations, workflows, skills, etc.) into type-safe Python SDK functions under `tools.*`.
-- 🔀 **In-Kernel Recursive Sub-Agents** — Call `rlm(task)` to spawn parallel sub-agents and `rlm_await(id)` to collect results inside Python code.
 - 💬 **A2A Agent Messaging（智能体间直接通信）** — Direct agent-to-agent messaging channels across family trees and siblings with result/message separation.
+- 🔀 **In-Kernel Recursive Sub-Agents** — Call `rlm(task)` to spawn parallel sub-agents and `rlm_await(id)` to collect results inside Python code.
 - 🪟 **Global Context Recency Window（全局上下文近期窗口）** — Sliding window compression that preserves recent turns while compacting older history.
 - 🧠 **Dynamic Harness & Compaction** — Built-in `refine()` for operating memory and `compact()` for context reduction under pressure.
 - 💾 **State Snapshot & Revival（状态快照与环境复原）** — Save and restore the kernel namespace across sessions.
-- 🔄 **Upstream-Proof Preset** — The `rlm-mode` agent preset dynamically includes `dsh`'s standard composition, staying compatible whenever upstream `dsh` introduces new capabilities.
 
 ---
 

@@ -2,4 +2,4 @@
 # (`rlm-mode`) and the trust comes from the root it is discovered under —
 # neither is writable here; this file carries display text ONLY.
 name: RLM Mode
-description: 'Full-featured coding agent with all standard-mode capabilities, plus: Recursive Language Models (RLM) (递归自调用), Python kernel unified to calling interface (统一的代码化工具调用界面), Context as variables (上下文即变量).'
+description: 'Full-featured coding agent with all standard-mode capabilities, plus: Recursive Language Models (RLM) (递归自调用), Python kernel unified to calling interface (统一的代码化工具调用), Context as variables (上下文即变量).'
