@@ -48,14 +48,14 @@ Instead of paying massive token costs on every round-trip tool call in standard 
 
 While both **RLM Mode (Dashr)** and `dsh`'s built-in **Code Mode** provide a code-first interface for programmatic tool orchestration, they differ fundamentally in language ecosystem, kernel persistence, and recursive capabilities:
 
-| Dimension | `dsh` Built-in Code Mode | RLM Mode (Dashr Plugin) | Highlight & Advantage |
+| Dimension | RLM Mode (Dashr Plugin) | Code Mode (`dsh` Built-in) | Highlight & Advantage |
 |---|---|---|---|
 | **Interface Standardization** | Host Toolset Registry Schema | Host Toolset Registry Schema | 🤝 Both dynamically expose typed SDK bindings (`tools.*`) generated from the same host registry. |
 | **Trigger & Orchestration** | Programmatic Code Execution (Multi-tool script per turn) | Programmatic Code Execution (Multi-tool script per turn) | 🤝 Both collapse multiple sequential tool calls into a single code execution step. |
-| **Execution Language** | TypeScript / JavaScript | **Python** (IPython 3.10+) | 🐍 Full access to Python's data science, AST analysis, and AI tooling ecosystem (`pandas`, `numpy`, etc.). |
-| **Backend & Kernel Layer** | Ephemeral Node.js Sandbox / One-shot runner | **Persistent IPython Kernel** (ZeroMQ + Jupyter Protocol) | ⚡ Dashr maintains a dedicated, persistent kernel per session. Variables, imports, and objects survive across turns. |
-| **Functional Recursive Delegation** | Framework-level Sub-Agent Tool Call | **Native `rlm()` Function Call (Arbitrary Recursion Depth)** | 🔀 Standardized as a zero-friction Python function (`rlm()`). Sub-agents can recursively spawn Level 2+ sub-agents with arbitrary depth, returning results directly into Python variables. |
-| **State Snapshot & Revival** | Stateless between restarts | **Full Namespace Snapshot (`dill`)** | 💾 Kernel state can be serialized and restored across session restarts. |
+| **Execution Language** | **Python** (IPython 3.10+) | TypeScript / JavaScript | 🐍 Full access to Python's data science, AST analysis, and AI tooling ecosystem (`pandas`, `numpy`, etc.). |
+| **Backend & Kernel Layer** | **Persistent IPython Kernel** (ZeroMQ + Jupyter Protocol) | Ephemeral Node.js Sandbox / One-shot runner | ⚡ Dashr maintains a dedicated, persistent kernel per session. Variables, imports, and objects survive across turns. |
+| **Functional Recursive Delegation** | **Native `rlm()` Function Call (Arbitrary Recursion Depth)** | Framework-level Sub-Agent Tool Call | 🔀 Standardized as a zero-friction Python function (`rlm()`). Sub-agents can recursively spawn Level 2+ sub-agents with arbitrary depth, returning results directly into Python variables. |
+| **State Snapshot & Revival** | **Full Namespace Snapshot (`dill`)** | Stateless between restarts | 💾 Kernel state can be serialized and restored across session restarts. |
 
 ---
 
