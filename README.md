@@ -44,6 +44,23 @@ Instead of paying massive token costs on every round-trip tool call in standard 
 
 ---
 
+## 📊 Comparison: RLM Mode (Dashr) vs. Code Mode (`dsh` built-in)
+
+While both **RLM Mode (Dashr)** and `dsh`'s built-in **Code Mode** enable programmatic multi-tool orchestration through code generation, they differ fundamentally in execution runtime, state persistence, and context efficiency:
+
+| Dimension | `dsh` Built-in Code Mode | RLM Mode (Dashr Plugin) | Highlight & Advantage |
+|---|---|---|---|
+| **Interface Standardization** | Host Toolset Registry Schema | Host Toolset Registry Schema | 🤝 Both dynamically expose typed SDK bindings (`tools.*`) generated from the same host registry. |
+| **Trigger & Orchestration** | Programmatic Code Execution (Multi-tool script per turn) | Programmatic Code Execution (Multi-tool script per turn) | 🤝 Both collapse multiple sequential tool calls into a single code execution step. |
+| **Execution Language** | TypeScript / JavaScript | **Python** (IPython 3.10+) | 🐍 Full access to Python's data science, AST analysis, and AI tooling ecosystem (`pandas`, `numpy`, etc.). |
+| **Backend & Kernel Layer** | Ephemeral Node.js Sandbox / One-shot runner | **Persistent IPython Kernel** (ZeroMQ + Jupyter Protocol) | ⚡ Dashr maintains a dedicated, persistent kernel per session. Variables, imports, and objects survive across turns. |
+| **Context Overhead ("Context is Variable")** | Intermediate tool outputs round-trip through prompt history | **In-memory variable storage**; only explicit output enters prompt | 📉 Massive token savings (up to 90%+). Large files, DataFrames, and raw payloads stay in kernel RAM instead of polluting the context window. |
+| **Recursive Delegation** | Standard sequential sub-agent tool call | **In-kernel `rlm()` / `rlm_await()` sub-agents** | 🔀 Child agents run in isolated sub-loops and return only distilled summaries back into parent Python variables. |
+| **State Snapshot & Revival** | Stateless between restarts | **Full Namespace Snapshot (`dill`)** | 💾 Kernel state can be serialized and restored across session restarts. |
+| **Dynamic Memory & Compaction** | Standard context truncation / FIFO sliding window | **Dynamic Harness (`refine()`) & Compaction (`compact()`)** | 🧠 Actively compresses evicted turns into operating guidance, retaining long-term trajectory. |
+
+---
+
 ## 💡 RLM
 
 Reference: [arXiv:2512.24601](https://arxiv.org/abs/2512.24601)
