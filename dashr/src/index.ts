@@ -1165,6 +1165,14 @@ export function createRunCellTool(registry: ToolRuntime, options: RunCellBridgeO
             // agent's id (a session id). An agentless call leaves it absent
             // and lands on the runtime's shared default key.
             ...exec.agent ? { principal: exec.agent.id } : {},
+            // The kernel's working directory = the session's workspace. The
+            // presentation layer is the per-session surface: it already holds
+            // `exec.agent` (the calling Agent), so it reads the same source
+            // the upstream `{{cwd}}` prompt variable reads and threads it down
+            // to the kernel spawn. An agentless call leaves it absent → the
+            // kernel inherits the daemon's cwd (the pre-fix leak, retained
+            // only for the no-session edge).
+            ...exec.agent ? { cwd: exec.agent.session.header.cwd } : {},
           })
         } finally {
           // Abort sub-dispatches and drain every in-flight dispatch before

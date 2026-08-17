@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, onTestFinished } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { IPythonCodeRuntime } from '../src/index.ts'
 import { KERNEL_PYTHON, setupRuntime } from './helpers.ts'
@@ -178,4 +178,28 @@ describe('IPythonCodeRuntime — per-session kernel keying', () => {
       expect(manifest.names).toContain(marker)
     }
   }, 30_000)
+})
+
+describe('IPythonCodeRuntime — per-session kernel cwd', () => {
+  it('spawns the kernel in the request cwd (session workspace), never the host process cwd', async () => {
+    const ctx = new Context()
+    const workspace = mkdtempSync(join(tmpdir(), 'dashr-cwd-'))
+    snapshotDirs.push(workspace)
+    const fiber = await ctx.plugin(IPythonCodeRuntime, { python: KERNEL_PYTHON, runTimeoutMs: 30_000 })
+    onTestFinished(() => fiber.dispose())
+    const runtime = ctx.rlmRuntime as IPythonCodeRuntime
+
+    // The presentation layer threads `agent.session.header.cwd` down as
+    // `request.cwd`; the runtime must spawn the kernel THERE, not inherit
+    // the host process cwd (the pre-fix leak).
+    const inside = await runtime.run({ program: 'import os; print(os.getcwd())', bindings: [], principal: 'sess-ws', cwd: workspace })
+    expect(inside.error).toBeUndefined()
+    expect(inside.logs.join('')).toContain(workspace)
+
+    // Agentless / no-cwd runs have no session workspace — cwd stays the
+    // spawn-time inherit.
+    const agentless = await runtime.run({ program: 'import os; print(os.getcwd())', bindings: [] })
+    expect(agentless.error).toBeUndefined()
+    expect(agentless.logs.join('')).toContain(process.cwd())
+  }, 60_000)
 })

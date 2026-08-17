@@ -54,8 +54,6 @@ import { MIN_OUTPUT_BYTES, extractStream, finalizeOutput, plainTraceback } from 
 export interface Config {
   /** Python interpreter with `ipykernel` installed. */
   python?: string
-  /** Working directory for the kernel subprocess. */
-  cwd?: string
   /** Budget for kernel spawn → ready, in milliseconds. */
   startupTimeoutMs?: number
   /** Wall budget per run; expiry interrupts the kernel then force-settles. */
@@ -83,7 +81,7 @@ export interface Config {
 }
 
 /** {@link Config} after schemastery fills the defaults. */
-type ResolvedConfig = Required<Omit<Config, 'cwd' | 'snapshotDir'>> & Pick<Config, 'cwd' | 'snapshotDir'>
+type ResolvedConfig = Required<Omit<Config, 'snapshotDir'>> & Pick<Config, 'snapshotDir'>
 
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/
 
@@ -119,6 +117,8 @@ function keyDirectoryName(principal: string): string {
 interface KeyedKernel {
   /** The map key (the run principal, or {@link AGENTLESS_KEY}). */
   key: string
+  /** The kernel's working directory (the session's workspace), fixed at first spawn. */
+  cwd?: string
   /** The subprocess bridge; replaced, never restarted, once dead. */
   bridge: IpyKernelBridge
   /**
@@ -161,7 +161,6 @@ interface SnapshotManifest {
 export class IPythonCodeRuntime extends RLMRuntime {
   static Config: z<Config> = z.object({
     python: z.string().default('python3'),
-    cwd: z.string(),
     startupTimeoutMs: z.number().default(30_000),
     runTimeoutMs: z.number().default(120_000),
     interruptGraceMs: z.number().default(2_000),
@@ -277,7 +276,7 @@ export class IPythonCodeRuntime extends RLMRuntime {
 
     let entry: KeyedKernel
     try {
-      entry = await this.ensureKernel(key)
+      entry = await this.ensureKernel(key, request.cwd)
     } catch (error: unknown) {
       return finalizeOutput([], undefined, { kind: 'worker-exit', message: `kernel failed to start: ${messageOf(error)}` }, this.config.maxOutputBytes)
     }
@@ -466,20 +465,26 @@ export class IPythonCodeRuntime extends RLMRuntime {
   }
 
   /**
-   * Spawn (once, lazily) or return one key's persistent kernel bridge. The
+   * Spawn-or-reuse the kernel for one key. The lazy map guarantees one
    * entry is created here and nowhere else, so a key that never runs never
    * holds a subprocess — the subagent fan-out guarantee (blueprint §6:
    * rlm() ×N spawns nothing until a child actually executes code).
    * @param key - the run principal (or the agentless default).
    */
-  private async ensureKernel(key: string): Promise<KeyedKernel> {
+  private async ensureKernel(key: string, cwd?: string): Promise<KeyedKernel> {
     let entry = this.kernels.get(key)
     if (!entry) {
+      // A session header cwd is a validated absolute path, but a workspace can
+      // be deleted before the kernel first spawns (e.g. a resumed session over
+      // a removed directory). Spawning with a missing cwd is a hard ENOENT, so
+      // degrade to spawn-time inherit rather than fail the whole kernel.
+      const kernelCwd = cwd && existsSync(cwd) ? cwd : undefined
       entry = {
         key,
+        cwd: kernelCwd,
         bridge: new IpyKernelBridge({
           python: this.config.python,
-          ...this.config.cwd ? { cwd: this.config.cwd } : {},
+          ...kernelCwd ? { cwd: kernelCwd } : {},
           startupTimeoutMs: this.config.startupTimeoutMs,
           disposeTimeoutMs: this.config.disposeTimeoutMs,
           interruptConfirmMs: this.config.interruptConfirmMs,
@@ -549,7 +554,7 @@ export class IPythonCodeRuntime extends RLMRuntime {
   private async reviveAfterDeath(key: string, dead: KeyedKernel): Promise<CodeRunResult> {
     let entry: KeyedKernel
     try {
-      entry = await this.ensureKernel(key)
+      entry = await this.ensureKernel(key, dead.cwd)
     } catch (error: unknown) {
       return finalizeOutput([], undefined, {
         kind: 'worker-exit',

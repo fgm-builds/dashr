@@ -114,7 +114,7 @@ export async function setupPresentation(
     id: SessionId('dashr-agent'),
     ...agentRoute === undefined ? {} : { options: agentRoute },
     session: {
-      header: { cwd: '/workspace' },
+      header: { cwd: process.cwd() },
       append: (type: string, data: unknown) => { events.push({ type, data }) },
     },
   } as unknown as Agent
@@ -132,7 +132,7 @@ export function fakeAgent(): { agent: Agent; events: { type: string; data: unkno
   const agent = {
     id: SessionId('audit-agent'),
     session: {
-      header: { cwd: '/workspace' },
+      header: { cwd: process.cwd() },
       append: (type: string, data: unknown) => { events.push({ type, data }) },
     },
   } as unknown as Agent

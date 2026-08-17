@@ -63,7 +63,6 @@ Every field of the plugin `Config` (schemastery defaults shown):
 | Field | Default | Meaning |
 | --- | --- | --- |
 | `python` | `python3` | Interpreter with `ipykernel` installed; spawned with `-m ipykernel_launcher`. |
-| `cwd` | *(unset)* | Working directory for the kernel subprocess. |
 | `startupTimeoutMs` | `30000` | Budget for kernel spawn → ready, in milliseconds. |
 | `runTimeoutMs` | `120000` | Wall budget per run; expiry interrupts the kernel then force-settles. |
 | `interruptGraceMs` | `2000` | Grace between a timeout/abort interrupt and the force-settle. |
@@ -260,9 +259,14 @@ Deliberately absent, with reasons (the upstream `code` preset carries them):
   composes them on the host when wanted.
 
 The provider row's config carries only the tunables worth overriding from a
-preset: `python` (from `DASHR_KERNEL_PYTHON`, else `python3`), `cwd`
-(unset → the host process cwd), `snapshotDir` (unset → no snapshots). See the
-sibling package's README for the full table.
+preset: `python` (from `DASHR_KERNEL_PYTHON`, else `python3`), `snapshotDir`
+(unset → no snapshots). The kernel's working directory is NOT a tunable: it
+is per-session state, resolved at kernel boot from the run principal through
+the host's `sessions` service (`session.header.cwd` — the same source the
+`{{cwd}}` prompt variable reads), so each session's kernel starts in that
+session's workspace. A principal with no resolvable session (agentless runs)
+falls back to inheriting the host process cwd. See the sibling package's
+README for the full table.
 
 ### Realm semantics (read this before relying on isolation)
 

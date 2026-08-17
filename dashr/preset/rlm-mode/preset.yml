@@ -2,4 +2,4 @@
 # (`rlm-mode`) and the trust comes from the root it is discovered under —
 # neither is writable here; this file carries display text ONLY.
 name: RLM Mode
-description: The standard coding agent presented through one persistent Python kernel (run_cell transport) — DASHR's RLM runtime.
+description: 具备标准模式的全部能力，并采用 Recursive Language Models 模式 —— 全部工具统一为 Python Kernel 调用接口，上下文即变量。

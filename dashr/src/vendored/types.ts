@@ -126,6 +126,18 @@ export interface CodeRunRequest {
    * (upstream-shaped requests keep their M1 meaning).
    */
   principal?: string
+  /**
+   * The kernel's working directory: the calling SESSION's workspace
+   * (`agent.session.header.cwd`), threaded by the presentation layer. Never
+   * the daemon's `process.cwd()`: a kernel is per-session state, so its cwd
+   * is per-session state, and inheriting the host cwd leaked the systemd
+   * unit's WorkingDirectory into every kernel regardless of the workspace the
+   * session was opened in. Absent (older caller, agentless run) → spawn-time
+   * inherit. Resolved ONLY on first spawn of a principal; a reused kernel
+   * keeps the cwd it booted with (a session's workspace is fixed in its
+   * header).
+   */
+  cwd?: string
 }
 
 /**
