@@ -11,8 +11,15 @@ variables, imports, and definitions assigned in run N survive into run N+1 —
 per-run isolation a one-shot execution backend provides — and two sessions
 sharing one service instance never see each other's variables.
 
-This is M1 of DASHR: the provider half of the seam. The consumer half —
-the `run_cell` transport tool, the Python SDK renderer, and the presentation
+Naming (v0.1.5 layer model): the runtime class is **`DashrRuntime`** — the
+standing-mount-layer component (one instance per mount holding the
+cross-session kernel map), and therefore the de facto daemon while the
+profile-level `DashrDaemon` concept stays an empty shell; the session layer
+is the ipykernel subprocess itself, a pure interpreter with no harness
+awareness.
+
+This is M1 of DASHR: the kernel provider. The consumer half —
+the `ipython` transport tool, the Python SDK renderer, and the presentation
 plugin that binds them to the dsh tool registry — lives in the sibling
 package `dsh-rlm-mode` (`../dashr-presentation`). The provider
 registers the service key `rlmRuntime` through its own vendored Service
@@ -77,9 +84,12 @@ Every field of the plugin `Config` (schemastery defaults shown):
 ## Persistent-state semantics
 
 - **Cell semantics**: each `run({ program })` is one cell on the calling
-  session's kernel namespace (`user_ns`). Top-level `await` and `return`
-  work; the completion value crosses the lossless-JSON boundary (explicit
-  `return None` → `null`; no `return` → no `value` field).
+  session's kernel namespace (`user_ns`) — a pure IPython REPL. Top-level
+  `await` works; a top-level `return` is a SyntaxError, exactly as in a
+  native IPython cell. The completion value is the LAST expression's value
+  (REPL displayhook-style): a statement-ending cell or a `None` final
+  expression yields no `value` field, and a non-JSON value comes back as its
+  repr text.
 - **Session keying** (M3-A): one kernel per distinct `request.principal`
   (the presentation bridge passes the calling agent's session id); runs
   without a principal share one default key, preserving M1 semantics. The
@@ -156,7 +166,7 @@ blueprint §10.8/§10.9.)
 
 ---
 
-# Presentation half (run_cell transport, SDK, bindings, harness)
+# Presentation half (ipython transport, SDK, bindings, harness)
 
 # dsh-rlm-mode
 
@@ -166,19 +176,25 @@ persistent IPython kernel**.
 
 Mounted in a preset's standing scope, it contributes:
 
-- **`run_cell`** — the only tool the model may call directly. One call = one
+- **`ipython`** — the only tool the model may call directly. One call = one
   cell on the persistent kernel (`ctx.rlmRuntime`, provided by the sibling
   package `dsh-rlm-mode`). Variables, imports, and definitions
   survive across calls. Nested tool calls ride the host registry's native
-  scheduling pipeline (`await tools.name({...})` inside the cell; member
-  bindings are positional, keyword arguments are rejected). Two BARE callable
-  globals are also installed per cell: `await rlm(prompt, label=None)` and
-  `await rlm_await(run_id)` (see "rlm() subagent binding").
-- **`tools:dashr-sdk`** — a generated Python SDK prompt section: one named
-  `TypedDict` per tool argument/output object, one awaitable method per
-  visible tool on a `Tools` protocol, and the cell contract (persistent
-  namespace, completion-value rules, `ToolCallError`, sub-call concurrency).
-- **The model-direct collapse** — an assembly filter leaves `run_cell` the
+  scheduling pipeline as FLAT top-level callables — `await name({...})`
+  inside the cell, one positional arguments object per callable, keyword
+  arguments rejected. Every binding — registry tool or bridge callable — uses
+  this same one-object form; the bridge callables `rlm`, `agent_message`,
+  `agent_list`, `rlm_workflow`, `rlm_ralph`, `refine`, and `compact` are
+  declared in the same catalog block as the registry tools (see "Delegation
+  and messaging" and "Continual Harness + refine()").
+- **`dashr:tool-catalog`** — a generated Python SDK prompt section: one named
+  `TypedDict` per tool argument/output object and one top-level
+  `async def name(args) -> Output` per visible tool (the flat v0.1.5 shape —
+  no `Tools` protocol, no `tools` singleton), plus the cell contract
+  (persistent namespace, completion-value rules, `ToolCallError`, sub-call
+  concurrency). The bridge callables render in the SAME block — no separate
+  "callables" annotation.
+- **The model-direct collapse** — an assembly filter leaves `ipython` the
   only contributed tool schema, and a monotonic guard denies a model-direct
   call naming anything else with the route back into a cell. Both are scoped
   to the mounting composition, so a PTC (native Code Mode) preset in the same
@@ -186,14 +202,35 @@ Mounted in a preset's standing scope, it contributes:
 
 ## Install
 
+The canonical path is the repo-root one-click installer (`install.sh`): it
+installs from the npm registry, localizes the rlm-mode agent preset (include
+path + kernel Python baked in), and notes the restart. The equivalent manual
+steps, for reference:
+
 ```sh
-dsh plugin add dsh-rlm-mode
+# 1. plugin — the pnpm registry-metadata cache can lag a fresh npm publish
+#    by minutes-to-hours, so drop it first, or `@latest` resolves the OLD
+#    version right after a release:
+rm -rf ~/.cache/pnpm
+dsh plugin --profile web add --config.auto-install-peers=false dsh-rlm-mode
+
+# 2. preset localization (bakes machine-specific values; see install.sh 5/5):
+STD_PRESET="$(dirname "$(readlink -f "$(command -v dsh)")")/../config/agent-presets/standard/agent.cordis.yml"
+KERNEL_PY=~/.dsh/dashr-kernel-venv/bin/python   # or plain python3 if it has ipykernel
+PRESET_SRC=~/.dsh/profiles/web/node_modules/dsh-rlm-mode/preset/rlm-mode
+sed -e "s|DASHR_PLACEHOLDER_standard_preset_path_install_script_required|$STD_PRESET|" \
+    -e "s|python: !!js process.env.DASHR_KERNEL_PYTHON ?? 'python3'|python: $KERNEL_PY|" \
+    "$PRESET_SRC/agent.cordis.yml" > ~/.dsh/.agent-presets/rlm-mode/agent.cordis.yml
+cp "$PRESET_SRC/preset.yml" ~/.dsh/.agent-presets/rlm-mode/preset.yml
+
+# 3. restart the running instance:  systemctl --user restart dsh
 ```
 
-That installs this package — and, through its peer chain, the
-`dsh-rlm-mode` kernel provider — into the dsh profile. `--patch`
-variants (`dsh plugin --patch ...` / a profile overlay) work the same way;
-the package is a plain npm install from the profile's perspective.
+Notes: `--config.auto-install-peers=false` is MANDATORY — the profile
+already resolves `@deepseek-ai/*` peers through the harness install; letting
+the package manager auto-install them adds a second, divergent copy of cordis
+and friends. The version is deliberately unpinned (`@latest`): the cache
+drop in step 1 is what makes a just-published release resolvable.
 
 Two more setup facts:
 
@@ -245,7 +282,7 @@ AGENT-PLANE composition in the shape of the upstream `code` preset. Its rows:
 | `agent-instructions` | `@deepseek-ai/dsh-agent-instructions` | Same as `code`. |
 | `dashr-kernel` (group, `isolate: { rlmRuntime: true }`) | `dsh-rlm-mode` + `dsh-rlm-mode` | The provider publishes `ctx.rlmRuntime` behind an entry-local realm; the presentation row sits INSIDE the group because realm-private services resolve only for rows sharing the realm. |
 | `filesystem` (group, `isolate: { fs: true }`) | `@deepseek-ai/dsh-fs-local` + `@deepseek-ai/dsh-tool-fs` | The `minimal` preset's bare-local pattern (the `code` preset instead uses the host's sandboxed `fs`). `read`/`write`/`edit` register on a bare host; `read_image` waits for an `attachments` service the host owns. |
-| `tool-todo` | `@deepseek-ai/dsh-tool-todo` | Registers into the registry's preset layer; also the binding-bridge material (`tools.todo_write(...)` inside a cell). |
+| `tool-todo` | `@deepseek-ai/dsh-tool-todo` | Registers into the registry's preset layer; also the binding-bridge material (`todo_write(...)` inside a cell). |
 
 Deliberately absent, with reasons (the upstream `code` preset carries them):
 
@@ -279,7 +316,7 @@ Session/Agent, so sessions stay apart inside one shared instance") — and
 since M3-A the provider honors exactly that: it keys **one kernel per
 Session/Agent inside the shared instance** (the run's `principal`, threaded
 from the calling agent's id by this package's bridge), spawns each lazily on
-that session's first `run_cell`, and tears it down on `agent/disposed`. State
+that session's first `ipython`, and tears it down on `agent/disposed`. State
 set by session A is therefore NOT visible to session B under either mount
 granularity; mounting per agent (the exported `mountPreset` primitive)
 additionally gives each session its own realm instance.
@@ -294,12 +331,12 @@ PTC Code-Mode session in the same process still resolves the host's
 
 ## Coexistence with a PTC Code-Mode session
 
-`run_cell` is our own transport name (the registry reserves `run_code`), so a
+`ipython` is our own transport name (the registry reserves `run_code`), so a
 Code-Mode preset (`@deepseek-ai/dsh-agent-tool-presentation` with
 `mode: code` over the host-plane worker-thread `codeRuntime`) composes beside
 the `dashr` preset in one process: the PTC agent's assembly shows `run_code`
-plus the TS `tools:sdk` section, the dashr agent's shows `run_cell` plus the
-Python `tools:dashr-sdk`, and neither execution path touches the other's
+plus the TS `tools:sdk` section, the dashr agent's shows `ipython` plus the
+Python `dashr:tool-catalog`, and neither execution path touches the other's
 runtime. One environmental caveat: the worker-thread provider strips
 TypeScript in-process, so a Node build without TS support
 (`process.features.typescript === false`, e.g. this dev box's v22 binary)
@@ -320,48 +357,62 @@ The row waits for `ctx.rlmRuntime` at mount (`ctx.inject`) and re-reads it at
 use time: a preset against a runtime-less deployment fails at mount, named in
 the preset's activation audit, instead of at the first prompt.
 
-## rlm() subagent binding (M3-B; model selection added in M4-A)
+## Delegation and messaging (rlm, agent_message, agent_list, rlm_workflow, rlm_ralph)
 
-Each cell installs two bare callable globals on top of the `tools` namespace:
+The upstream delegation tools stay REGISTERED and executable but are masked
+from the model's surface (presentation-only, ADR-0002): `subagent`,
+`subagent_fork`, `send_message`, `list_agents`, `interrupt_agent`, `workflow`,
+`ralph`, and the child-scoped `report` appear in neither the Tool Catalog
+text nor the kernel binding names. The bridge callables re-expose them with
+the cell's ergonomics, dispatching through the SAME nested sub-dispatch
+pipeline (and `agent_message({"receiver": "parent", ...})` over the service
+layer for `report`), so the upstream enforcement surface (approval, sandbox,
+`maxDepth`, per-instance config) is inherited wholesale. Every bridge callable
+takes the SAME one-object form as the registry tools — `await name({...})`:
 
-- `handle = await rlm(prompt, label=None, model=None)` — non-blocking ADMISSION
-  of a child agent through the host-plane `ctx.subagents` service, in-process
-  provider `spawn` first (blueprint §9). The `await` resolves when the child is
-  PUBLISHED, not when it finishes — the same admission semantics as the RLM
-  runtime's own `rlm()`. Returns
-  `{run_id, label, provider: 'spawn', local, model}`; the child keeps running
-  after the cell returns and is cancelled by the enclosing `run_cell`'s outer
-  signal.
-- Child-model selection (M4-A) is a three-level priority:
-  `rlm(model="...")` > the composition's `subagentModel` config > the parent
-  agent's own model. The first two tiers reach the harness as
-  `agentOptions: { model }` on the start request (the handle's `model` field
-  reports what was resolved, `null` for inheritance); when BOTH are unset the
-  request carries no `agentOptions` at all and the harness's own
-  parent-inheritance applies — this plugin never names the parent model
-  itself. `model=None` is "unspecified" (falls through to the config tier),
-  and any non-string value is rejected as a result error, never a host crash.
-- `result = await rlm_await(run_id)` — blocks the cell until that run settles
-  and returns `{output: str, stop_reason: str, structured: Any|None}`
-  (`output` is the child's final text, with non-text blocks folded to compact
-  markers). The wait is interruptible by the cell's own timeout/abort.
+- `child = await rlm({"mode": "spawn" | "fork" | "interrupt", ...})` — mode
+  dispatch over the subagent tools: `"spawn"` bridges `subagent` (a fresh
+  child); `"fork"` bridges `subagent_fork` (a child seeded from this
+  conversation's completed turns); `"interrupt"` (with `agent_id`) bridges
+  `interrupt_agent`. Children run in the BACKGROUND by default — admission
+  returns a durable subagent id immediately and the child reports up when it
+  settles (a wakeup notice). Pass `{"run_in_background": false}` only when the
+  next step depends on the child's result: that call blocks and returns the
+  child's output. There is no `rlm_await` (the pre-v0.1.5 polling wrapper is
+  gone — foreground mode covers blocking fan-in, and `asyncio.gather` fans out).
+- `await agent_message({"receiver": "child" | "parent", "message": ...,
+  "subagent_id": ...})` — the dual-use A2A channel. `"receiver": "child"` (with
+  the spawn's `subagent_id`) bridges the `send_message` tool downlink;
+  `"receiver": "parent"` reports up through the SERVICE layer
+  (`ctx.subagents.reportFrom(exec.agent, ...)`) — the single child->parent
+  channel, replacing the masked `report` tool. The uplink works only for a
+  live continuable child — a root agent gets a structured `UNAUTHORIZED`
+  instead.
+- `await agent_list({"scope": "children" | "descendants"})` — bridges
+  `list_agents` (`"children"` is the default).
+- `await rlm_workflow({"meta": ..., "script": ...})` — bridges `workflow`: a
+  JavaScript orchestration script plus its meta identity block.
+- `await rlm_ralph({"objective": ..., "max_rounds": ...})` — bridges `ralph`:
+  iterative fresh-agent rounds toward an objective.
 
-Both bindings return structured JSON; errors are a FIELD on the result, never
-a host crash — no `ctx.subagents` service, no `spawn` provider, an unsupported
-capability, a depth cap, an unknown `run_id`, or an infrastructure rejection
-all map to an `error` string (or `rlm_await`'s `stop_reason: 'error'`). Live
-handles are held host-side per composition, settled/removed by `rlm_await`,
-and every unsettled run owned by a session is disposed on that session's
-`agent/disposed` (and all of them on composition teardown).
+Child-model selection is deployment-level, not per-call: the pre-v0.1.5
+`model` key is gone, and the preset pins `agentOptions.model` on the
+`tool-subagent`/`tool-subagent-fork` rows (default: parent-model inheritance).
+Every binding returns structured JSON; errors are a FIELD on the result, never
+a host crash — a missing `ctx.subagents` service, an unsupported capability, a
+depth cap, an unknown id, or an infrastructure rejection all map to an
+`error` string.
 
 Realm boundary: `ctx.subagents` is a HOST-PLANE root-realm singleton (the
 `dashr` preset deliberately does not carry the subagent rows), while this row
 sits inside the preset's `isolate: { rlmRuntime: true }` realm. Cordis resolves
 outer-realm services for names the inner realm does NOT isolate, so this row
 reaches `ctx.subagents` outward through `ctx.get('subagents')` while the
-realm-private `rlmRuntime` stays invisible to the root — which is why the
-rlm() host callback lives HERE (it is the one layer that can simultaneously
-see `ctx.subagents`, the parent `Agent` on `exec.agent`, and the abort signal).
+realm-private `rlmRuntime` stays invisible to the root. The
+`agent_message` uplink callback lives HERE because it is the one layer that
+can simultaneously see `ctx.subagents` (outward), the reporting child `Agent`
+(`exec.agent`), and the run's abort signal; every DOWNLINK bridges the tool
+layer instead, so the delegation tools' policy surface stays in force.
 
 ## Continual Harness + refine() (M4-B)
 
@@ -375,7 +426,7 @@ model request with no restart. An empty harness renders an empty section
 a literal `{{var}}` inside a memory can never throw (or silently interpolate)
 the prompt-variable machinery.
 
-Each cell exposes `summary = await refine(instruction)` — one bare callable
+Each cell exposes `summary = await refine({"instruction": "..."})` — one bare callable
 global:
 
 1. The host resolves the aux model route: `refineModel` config (`'provider/model'`,
@@ -407,7 +458,7 @@ an aborted refine is a structured `error`, never a partial store mutation.
 
 ## compact() (M4-B)
 
-`result = await compact()` (or `compact(reason)`) exposes the PA
+`result = await compact()` (or `compact({"reason": "..."})`) exposes the PA
 check-usage→summarize→keep-working semantics over the compaction seam. It
 first attaches the session's current pressure as `context_tokens` when a
 `ctx.tokenMeter` is mounted (the probe is advisory — a failing meter never
@@ -472,7 +523,6 @@ structured `error` fields.
 | Field | Default | Meaning |
 | --- | --- | --- |
 | `maxParallelSubCalls` | `10` | Cap on one cell's overlapping sub-calls (native scheduler contract; `1` = strictly serial). |
-| `subagentModel` | unset | Composition-wide default model for `rlm()` children — the middle tier of `rlm(model=...) > subagentModel > parent inheritance`. Unset means pure parent inheritance (no `agentOptions` on the start request). Must be a non-empty string when set. |
 | `harnessDir` | unset | Root for the Continual Harness store: one `harness.json` per agent, atomically written, restored by the next composition of the same agent id. Unset = memory-only (dies with the composition). Must be a non-empty string when set. |
 | `refineModel` | unset | Aux model route for `refine()`: `'provider/model'` explicit, a bare model id paired with the calling agent's provider, or unset for the agent's own route. Must be a non-empty string when set. |
 | `compactModel` | unset | Summarization model for `compact()`: mounts a DASHR-scoped `BasicCompactionEngine` (design A — see above) under `ctx.isolate('compaction')` with this route and `auto: false`. Unset inherits the host engine and its model chain. Requires the optional peer `@deepseek-ai/dsh-compaction-basic` when set. Must be a non-empty string when set. |
@@ -505,5 +555,5 @@ the sibling package built (`pretest` handles the order).
 Structure mirrors `@deepseek-ai/dsh-agent-tool-presentation` and the Code Mode
 half of `@deepseek-ai/dsh-tools` (0.1.0-rc.6), re-pointed at the vendored
 `rlmRuntime` Service Definition. See the module docs in `src/index.ts` for
-the deliberate deltas (`run_cell` vs `run_code`, ordinary scoped registration,
+the deliberate deltas (`ipython` vs `run_code`, ordinary scoped registration,
 guard-based collapse, mirrored `tools/code-dispatch-log` waterfall).

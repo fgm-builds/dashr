@@ -155,12 +155,21 @@ async function harness(extras: { ptcRuntime?: boolean } = {}): Promise<Context> 
     c.provide('web', {})
     c.provide('tokenMeter', { measure: () => ({ totalTokens: 0 }) })
     c.provide('commands', { register: () => undefined })
-    // getProvider → undefined defers the subagent TOOL rows gracefully (the
-    // upstream tool logs "not registered yet"); rlm() still resolves this
-    // service directly. Tests that need spawn behavior mutate `start`.
+    // Fake spawn/fork providers so the standard preset's delegation TOOL
+    // rows actually register (the upstream tool defers until a provider
+    // appears). The tools' EXECUTION goes through `startContinuable`, which
+    // each test configures (the 0.1.4 precedent of mutating the stub's
+    // behavior). capabilities.depthLimit is what lets the patched
+    // `maxDepth: 10` through the tool's mount-time capability check.
+    const fakeProvider = (name: string) => ({
+      name,
+      capabilities: { depthLimit: 10 },
+      inheritsParentContext: name === 'fork',
+      prepareContinuable: () => { throw new Error('not called by these tests') },
+    })
     c.provide('subagents', {
-      getProvider: () => undefined,
-      async start() { throw new Error('harness subagents stub: start not configured for this test') },
+      getProvider: (name: string) => fakeProvider(name),
+      async startContinuable() { throw new Error('harness subagents stub: startContinuable not configured for this test') },
     })
   } })
   if (extras.ptcRuntime) {
@@ -244,9 +253,9 @@ function contentText(result: ToolExecutionResult): string {
   return result.content.map(block => (block.type === 'text' ? block.text : '')).join('\n')
 }
 
-/** `run_cell` shorthand. */
-function runCell(ctx: Context, agent: Agent, code: string): Promise<ToolExecutionResult> {
-  return execute(ctx, agent, 'run_cell', { code, description: 'preset smoke cell' })
+/** `ipython` shorthand. */
+function runCell(ctx: Context, agent: Agent, cell: string): Promise<ToolExecutionResult> {
+  return execute(ctx, agent, 'ipython', { cell, description: 'preset smoke cell' })
 }
 
 /** Strip ipykernel's one-time Comm DeprecationWarning noise from captured logs (M2A precedent). */
@@ -265,7 +274,7 @@ function stripWarnings(logs: string[]): string[] {
   return kept
 }
 
-/** The success value of one `run_cell` dispatch, with warning noise removed. */
+/** The success value of one `ipython` dispatch, with warning noise removed. */
 function cellValue(result: ToolExecutionResult): { logs: string[]; result?: unknown } {
   expect(result.isError, `cell failed: ${String(result.content)}`).toBe(false)
   const value = result.value as { logs: string[]; result?: unknown }
@@ -306,10 +315,10 @@ describe('the dashr preset roster', () => {
     const prompt = await ctx.systemPrompt.assemble(assembleContextFor(dashr))
     // Model-facing tools collapse to the transport; every registered tool
     // lives in the Python SDK section instead.
-    expect(prompt.tools.map(schema => schema.name)).toEqual(['run_cell'])
-    const sdk = prompt.sections.find(section => section.name === 'tools:dashr-sdk')
+    expect(prompt.tools.map(schema => schema.name)).toEqual(['ipython'])
+    const sdk = prompt.sections.find(section => section.name === 'dashr:tool-catalog')
     expect(sdk).toBeDefined()
-    expect(String(sdk!.text)).toContain('run_cell')
+    expect(String(sdk!.text)).toContain('ipython')
     expect(String(sdk!.text)).toContain('Python')
     // Mode-defining check: the PTC transport name must not appear in the
     // Python SDK (tool descriptions legitimately mention the word
@@ -320,21 +329,27 @@ describe('the dashr preset roster', () => {
 
     // A second session joins the same standing mount without colliding.
     const secondPrompt = await ctx.systemPrompt.assemble(assembleContextFor(second))
-    expect(secondPrompt.tools.map(schema => schema.name)).toEqual(['run_cell'])
-    expect(secondPrompt.sections.map(section => section.name)).toContain('tools:dashr-sdk')
+    expect(secondPrompt.tools.map(schema => schema.name)).toEqual(['ipython'])
+    expect(secondPrompt.sections.map(section => section.name)).toContain('dashr:tool-catalog')
 
     // A neighbor that joined no preset sees none of it: empty global layer,
-    // no run_cell, no SDK section. It still sees the HOST's deployment persona
+    // no ipython, no SDK section. It still sees the HOST's deployment persona
     // section (the harness mounts SystemPrompt with an empty persona), which
     // is exactly what the preset's persona shadows for joined agents — so the
     // leak check is on the TEXT, not the section name.
     const barePrompt = await ctx.systemPrompt.assemble(assembleContextFor(bare.agent))
     expect(barePrompt.tools.map(schema => schema.name)).toEqual([])
-    expect(barePrompt.sections.map(section => section.name)).not.toContain('tools:dashr-sdk')
+    expect(barePrompt.sections.map(section => section.name)).not.toContain('dashr:tool-catalog')
     const barePersona = barePrompt.sections.find(section => section.name === 'deployment:persona')
     expect(String(barePersona?.text ?? '')).not.toContain('DASHR agent')
     const dashrPersona = prompt.sections.find(section => section.name === 'deployment:persona')
-    expect(String(dashrPersona?.text ?? '')).toContain('DASHR agent')
+    const dashrPersonaText = String(dashrPersona?.text ?? '')
+    expect(dashrPersonaText).toContain('DASHR agent')
+    // Minimal identity (plan Q3): the persona no longer carries operational
+    // kernel guidance — that moved to the dashr:control-prompt section.
+    expect(dashrPersonaText).not.toContain('primary tool interface')
+    expect(dashrPersonaText).not.toContain('tools.<name>(...)')
+    expect(dashrPersonaText).not.toContain('tool catalog')
   })
 
   it('keeps the kernel runtime out of the root realm (isolate realm) and leak-free at mount', async () => {
@@ -446,34 +461,31 @@ describe('the dashr preset roster', () => {
   }, 30_000)
 
   it('keeps the host kernel count at one after rlm() ×3 (children inherit the provider but never run code)', async () => {
-    // The rlm() end-to-end form of the lazy-start gate: the presentation
-    // bridge calls the host-plane ctx.subagents service (stubbed here with
-    // the one behavior that matters — real composeFrom inheritance, the same
-    // call the in-process spawn provider makes), three children join the
-    // parent's standing composition, and none run code. The DASHR provider's
-    // per-key lazy spawn therefore holds no extra kernel for any of them.
+    // The rlm() end-to-end form of the lazy-start gate, v0.1.5 shape: the
+    // bridge dispatches the REGISTERED subagent tool (mounted from the
+    // standard preset, backgroundMode continuable), whose execution reaches
+    // the stubbed ctx.subagents.startContinuable — configured here with the
+    // one behavior that matters, real composeFrom inheritance (the same
+    // call the in-process spawn provider makes). Three children join the
+    // parent's standing composition and none run code, so the DASHR
+    // provider's per-key lazy spawn holds no extra kernel for any of them.
     const before = kernelProcessCount()
     const ctx = await harness()
     const parent = await agentOn(ctx, 'sess-rlm-parent')
     let childIndex = 0
 
     // The harness-level subagents stub owns the service; this test only
-    // configures the start behavior (a second provide would throw).
+    // configures the continuable-start behavior (a second provide would
+    // throw).
     const subagents = ctx.get('subagents') as {
-      getProvider: (provider: string) => unknown
-      start: (name: string, request: { parent: Agent }) => Promise<unknown>
+      startContinuable: (spec: { provider: string, label: string, request: { parent: Agent } }) => Promise<{ childId: unknown }>
     }
-    subagents.start = async (_name: string, request: { parent: Agent }) => {
+    subagents.startContinuable = async (spec) => {
       for (let i = 0; i < 3; i++) {
         const child = await ctx.agents.create({ sessionId: SessionId(`rlm-child-${++childIndex}`) })
-        expect(ctx.agentPresets.composeFrom(child.agent.ctx, request.parent.ctx)).toBe('rlm-mode')
+        expect(ctx.agentPresets.composeFrom(child.agent.ctx, spec.request.parent.ctx)).toBe('rlm-mode')
       }
-      return {
-        id: SessionId('rlm-stub-run'),
-        localAgent: undefined,
-        result: Promise.resolve({ output: [{ type: 'text', text: 'done' }], stopReason: 'completed' }),
-        async dispose() {},
-      }
+      return { childId: SessionId(`rlm-child-${childIndex}`) }
     }
 
     // Warm the parent's kernel first (lazy spawn happens on its first cell).
@@ -483,15 +495,69 @@ describe('the dashr preset roster', () => {
 
     const result = await runCell(ctx, parent, [
       'handles = []',
-      'for label in ("a", "b", "c"):',
-      '    handles.append(await rlm("task-" + label, label=label))',
-      'return [h["run_id"] for h in handles]',
+      "for label in ('a', 'b', 'c'):",
+      "    handles.append(await rlm({'mode': 'spawn', 'prompt': 'task-' + label, 'label': label}))",
+      '[h["subagentId"] for h in handles]',
     ].join('\n'))
     expect(result.isError, `cell failed: ${contentText(result)}`).toBe(false)
 
     // Real process count stays at the parent's single kernel.
     await new Promise(resolve => setTimeout(resolve, 300))
     expect(kernelProcessCount()).toBe(withParent)
+  }, 30_000)
+
+  it('patches the delegation rows: the mounted subagent tool carries maxDepth 10 and continuable background mode', async () => {
+    // The include patches (Q22/Q23) restate both delegation rows' config
+    // with maxDepth: 10. Proven end-to-end: the REAL tool mounted from the
+    // standard preset executes through rlm({"mode": "spawn", ...}) — omitted
+    // run_in_background means continuable admission (startContinuable, not
+    // jobs/start) — and the start request it builds carries the patched
+    // depth. This is the patch-effective check the plan mandates.
+    const ctx = await harness()
+    const parent = await agentOn(ctx, 'sess-depth-parent')
+    const seen: { provider: string, label: string, maxDepth: number | undefined }[] = []
+    const subagents = ctx.get('subagents') as {
+      startContinuable: (spec: { provider: string, label: string, request: Record<string, unknown> & { maxDepth?: number, parent: Agent } }) => Promise<{ childId: unknown }>
+    }
+    subagents.startContinuable = async (spec) => {
+      seen.push({
+        provider: spec.provider,
+        label: spec.label,
+        maxDepth: typeof spec.request.maxDepth === 'number' ? spec.request.maxDepth : undefined,
+      })
+      return { childId: SessionId('depth-child') }
+    }
+
+    const result = await runCell(ctx, parent, [
+      "first = await rlm({'mode': 'spawn', 'prompt': 'depth probe'})",
+      "second = await rlm({'mode': 'fork', 'prompt': 'depth probe fork'})",
+      '[first["subagentId"], second["subagentId"]]',
+    ].join('\n'))
+    expect(result.isError, `cell failed: ${contentText(result)}`).toBe(false)
+    expect((result.value as { result: unknown }).result).toEqual(['depth-child', 'depth-child'])
+    // The tool maps its REQUIRED `description` (rlm's label, defaulting to
+    // 'subagent') onto the child's creation label; the depth is the patched
+    // config flowing through the real tool's request.
+    expect(seen).toEqual([
+      { provider: 'spawn', label: 'subagent', maxDepth: 10 },
+      { provider: 'fork', label: 'subagent', maxDepth: 10 },
+    ])
+
+    // And the masked names never surface to the model, while the delegation
+    // tools stay registered and executable (the dispatch above proves it).
+    const prompt = await ctx.systemPrompt.assemble(assembleContextFor(parent))
+    expect(prompt.tools.map(schema => schema.name)).toEqual(['ipython'])
+    const catalog = String(prompt.sections.find(section => section.name === 'dashr:tool-catalog')?.text)
+    for (const masked of ['async def subagent(', 'async def subagent_fork(', 'async def send_message(', 'async def list_agents(', 'async def interrupt_agent(', 'async def workflow(', 'async def ralph(']) {
+      expect(catalog).not.toContain(masked)
+    }
+    expect(catalog).toContain('async def file_glob(')
+    expect(catalog).not.toContain('async def glob(')
+    // The registry keeps them all, `glob` included (under its real name).
+    const registered = ctx.tools.schemas(parent).map(schema => schema.name)
+    expect(registered).toContain('subagent')
+    expect(registered).toContain('subagent_fork')
+    expect(registered).toContain('glob')
   }, 30_000)
 
   it('executes real kernels end-to-end through the mounted preset', async () => {
@@ -505,7 +571,7 @@ describe('the dashr preset roster', () => {
     // A real dsh tool through the binding bridge: todo_write → registry
     // dispatch → the agent's durable session event.
     expect(cellValue(await runCell(ctx, agent,
-      'await tools.todo_write({"todos": [{"content": "M2B preset smoke", "status": "in_progress"}]})',
+      'await todo_write({"todos": [{"content": "M2B preset smoke", "status": "in_progress"}]})',
     )).logs).toEqual([])
     expect(agent.session.events.some(event => event.type === 'todo/write')).toBe(true)
 
@@ -513,10 +579,10 @@ describe('the dashr preset roster', () => {
     // backend (cwd = DSH_CWD; the restacked preset resolves host fs like the
     // standard preset) → bytes on disk.
     expect(cellValue(await runCell(ctx, agent,
-      'await tools.write({"file_path": "preset-smoke.txt", "content": "hi from dashr"})',
+      'await write({"file_path": "preset-smoke.txt", "content": "hi from dashr"})',
     )).logs).toEqual([])
     const read = cellValue(await runCell(ctx, agent,
-      'print(await tools.read({"file_path": "preset-smoke.txt"}))',
+      'print(await read({"file_path": "preset-smoke.txt"}))',
     ))
     expect(read.logs.join('\n')).toContain('hi from dashr')
     expect(await import('node:fs/promises').then(fs => fs.readFile(join(WORKDIR, 'preset-smoke.txt'), 'utf8')))
@@ -562,7 +628,7 @@ describe('coexistence with a PTC Code-Mode session', () => {
   /** The worker-thread provider strips TypeScript in-process; a Node built without TS support degrades at run. */
   const ptcExecutable = process.features.typescript !== false
 
-  it('presents run_code + TS SDK to the PTC neighbor and run_cell + Python SDK to dashr', async () => {
+  it('presents run_code + TS SDK to the PTC neighbor and ipython + Python SDK to dashr', async () => {
     const ctx = await harness({ ptcRuntime: true })
     const dashr = await agentOn(ctx, 'sess-ptc-dashr')
     // The PTC neighbor: host-plane codeRuntime + a mode:code presentation row
@@ -574,9 +640,9 @@ describe('coexistence with a PTC Code-Mode session', () => {
     const dashrPrompt = await ctx.systemPrompt.assemble(assembleContextFor(dashr))
     const ptcPrompt = await ctx.systemPrompt.assemble(assembleContextFor(ptc.agent))
 
-    expect(dashrPrompt.tools.map(schema => schema.name)).toEqual(['run_cell'])
+    expect(dashrPrompt.tools.map(schema => schema.name)).toEqual(['ipython'])
     expect(ptcPrompt.tools.map(schema => schema.name)).toEqual(['run_code'])
-    expect(dashrPrompt.sections.map(section => section.name)).toContain('tools:dashr-sdk')
+    expect(dashrPrompt.sections.map(section => section.name)).toContain('dashr:tool-catalog')
     const tsSdk = ptcPrompt.sections.find(section => section.name === 'tools:sdk')
     expect(tsSdk).toBeDefined()
     expect(String(tsSdk!.text)).toContain('run_code')
@@ -584,7 +650,7 @@ describe('coexistence with a PTC Code-Mode session', () => {
 
     // No cross-leak in either direction.
     expect(dashrPrompt.tools.some(schema => schema.name === 'run_code')).toBe(false)
-    expect(ptcPrompt.tools.some(schema => schema.name === 'run_cell')).toBe(false)
+    expect(ptcPrompt.tools.some(schema => schema.name === 'ipython')).toBe(false)
 
     // DASHR executes Python in the same process, on its own kernel.
     expect(cellValue(await runCell(ctx, dashr, 'print("dashr says hi")')).logs).toEqual(['dashr says hi'])

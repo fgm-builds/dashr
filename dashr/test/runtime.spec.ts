@@ -7,7 +7,7 @@ import { setupRuntime } from './helpers.ts'
  * local and cheap once booted, per dsh's real-over-mock policy). Each test
  * builds a fresh context and shares nothing with the others.
  */
-describe('IPythonCodeRuntime — programs on a persistent kernel', () => {
+describe('DashrRuntime — programs on a persistent kernel', () => {
   it('registers with the seam descriptors', async () => {
     const { runtime } = await setupRuntime()
     expect(runtime.language).toBe('python')
@@ -39,7 +39,7 @@ describe('IPythonCodeRuntime — programs on a persistent kernel', () => {
       '  id,',
       '  name',
       'FROM users"""',
-      'return template',
+      'template',
     ].join('\n')
     const result = await runtime.run({ program, bindings: [] })
     expect(result.error).toBeUndefined()
@@ -47,25 +47,25 @@ describe('IPythonCodeRuntime — programs on a persistent kernel', () => {
     expect(result.value).toBe('SELECT\n  id,\n  name\nFROM users')
   })
 
-  it('keeps function docstrings intact when the program is re-indented', async () => {
+  it('keeps function docstrings intact', async () => {
     const { runtime } = await setupRuntime()
     const program = [
       'def helper():',
       '    """First summary line.',
       '    Details follow."""',
       '    return 1',
-      'return helper.__doc__',
+      'helper.__doc__',
     ].join('\n')
     const result = await runtime.run({ program, bindings: [] })
     expect(result.error).toBeUndefined()
     expect(result.value).toBe('First summary line.\n    Details follow.')
   })
 
-  it('preserves an explicit null completion and omits value for no-return', async () => {
+  it('suppresses a None completion and omits value for a statement-ending cell', async () => {
     const { runtime } = await setupRuntime()
-    const explicit = await runtime.run({ program: 'return None', bindings: [] })
-    expect(explicit.error).toBeUndefined()
-    expect(explicit.value).toBeNull()
+    const suppressed = await runtime.run({ program: 'None', bindings: [] })
+    expect(suppressed.error).toBeUndefined()
+    expect(suppressed.value).toBeUndefined()
     const absent = await runtime.run({ program: 'pass', bindings: [] })
     expect(absent.error).toBeUndefined()
     expect(absent.value).toBeUndefined()
@@ -73,20 +73,27 @@ describe('IPythonCodeRuntime — programs on a persistent kernel', () => {
 
   it('captures logs in order and returns the completion value', async () => {
     const { runtime } = await setupRuntime()
-    const result = await runtime.run({ program: 'print("hello")\nprint("world")\nreturn {"sum": 40 + 2}', bindings: [] })
+    const result = await runtime.run({ program: 'print("hello")\nprint("world")\n{"sum": 40 + 2}', bindings: [] })
     expect(result.error).toBeUndefined()
     expect(result.logs).toEqual(['hello', 'world'])
     expect(result.value).toEqual({ sum: 42 })
   })
 
-  it('supports top-level await inside the function-body contract', async () => {
+  it('supports top-level await', async () => {
     const { runtime } = await setupRuntime()
     const result = await runtime.run({
-      program: 'import asyncio\nvalue = await asyncio.sleep(0, 7)\nreturn value',
+      program: 'import asyncio\nvalue = await asyncio.sleep(0, 7)\nvalue',
       bindings: [],
     })
     expect(result.error).toBeUndefined()
     expect(result.value).toBe(7)
+  })
+
+  it("rejects a top-level 'return' as a SyntaxError, like a native IPython cell", async () => {
+    const { runtime } = await setupRuntime()
+    const result = await runtime.run({ program: 'return 1', bindings: [] })
+    expect(result.error?.kind).toBe('exception')
+    expect(result.error?.message).toContain("'return' outside function")
   })
 
   it('reports a program exception as a result field with the traceback', async () => {
@@ -98,11 +105,12 @@ describe('IPythonCodeRuntime — programs on a persistent kernel', () => {
     expect(result.value).toBeUndefined()
   })
 
-  it('reports a non-JSON completion as invalid-output', async () => {
+  it('passes a non-JSON completion through as its repr text', async () => {
     const { runtime } = await setupRuntime()
-    const result = await runtime.run({ program: 'return object()', bindings: [] })
-    expect(result.error?.kind).toBe('invalid-output')
-    expect(result.value).toBeUndefined()
+    const result = await runtime.run({ program: 'object()', bindings: [] })
+    expect(result.error).toBeUndefined()
+    expect(typeof result.value).toBe('string')
+    expect(result.value).toContain('<object object at')
   })
 
   it('flushes state even when the program raises', async () => {

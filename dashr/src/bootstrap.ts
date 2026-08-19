@@ -13,7 +13,7 @@ export const HOST_COMM_TARGET = 'dashr.host'
 
 /**
  * The bootstrap source. Kept dependency-free apart from `ast`, `asyncio`,
- * `json`, and `ipykernel.comm` (present by construction — it IS the kernel).
+ * `json`, and `comm` (present by construction — it IS the kernel).
  */
 export const KERNEL_BOOTSTRAP = `
 import ast as _dashr_ast
@@ -89,14 +89,14 @@ class _DashrRejected(Exception):
 
 
 def _dashr_host_request(payload):
-    from ipykernel.comm import Comm
+    from comm import create_comm
     import asyncio
     _dashr_install_control_comm_handlers()
     loop = asyncio.get_running_loop()
     future = loop.create_future()
     # primary=True publishes comm_open so the host learns this comm_id; the
     # request itself travels as the first comm_msg.
-    comm = Comm(target_name=${JSON.stringify(HOST_COMM_TARGET)})
+    comm = create_comm(target_name=${JSON.stringify(HOST_COMM_TARGET)})
 
     def _resolve(action):
         def _apply():
@@ -176,19 +176,28 @@ def _dashr_make_holder(global_name, error_class_name, member_property):
 
 
 def _dashr_make_callable(global_name, function_name, error_class_name, member_property):
-    # A BARE callable global (M3-B rlm()/rlm_await(): 'callable: true' on the
-    # namespace) instead of an object holder. Unlike member proxies, a
-    # callable global may receive keyword arguments (rlm(prompt, *, label=…)),
-    # so the call is packaged uniformly as {'args': [...], 'kwargs': {...}}
-    # and the HOST binding function owns the signature validation — the same
-    # "the host owns the namespace" rule as attribute misses above. The single
-    # functions-entry name is transport-only: the program never sees it.
-    async def _dashr_callable(*args, **kwargs):
+    # A BARE callable global (the flat per-tool bindings AND the bridge
+    # tools: 'callable: true' on the namespace) instead of an object
+    # holder. The one-object form is the single convention: every callable
+    # takes exactly one positional arguments object (e.g.
+    # rlm({'mode': 'spawn', ...})), and keyword / multi-positional forms are
+    # rejected HERE, at the Python call boundary, so the introspectable
+    # signature tells the truth and a TypeError names the binding global
+    # (read(...) got an unexpected keyword argument ...). The wire envelope
+    # keeps the historical {'args': [...], 'kwargs': {}} shape so the host's
+    # parseRlmCall / flatToolArgs / flatBridgeToolArgs validation layers stay
+    # authoritative and unchanged. The single functions-entry name is
+    # transport-only: the program never sees it, and a typed rejection
+    # carries the GLOBAL name as its member (for a flat tool binding the
+    # global IS the tool name the program knows). __name__/__qualname__ are
+    # pinned to the global name so introspection shows the binding's name,
+    # not the factory-local _dashr_callable.
+    async def _dashr_callable(args=None, /):
         payload = {
             'type': 'binding.call',
             'global': global_name,
             'name': function_name,
-            'args': {'args': list(args), 'kwargs': kwargs},
+            'args': {'args': [] if args is None else [args], 'kwargs': {}},
         }
         try:
             return await _dashr_host_request(payload)
@@ -196,120 +205,90 @@ def _dashr_make_callable(global_name, function_name, error_class_name, member_pr
             cls = globals().get(error_class_name) if error_class_name else None
             if cls is None:
                 raise
-            raise cls(str(rejected), function_name) from None
+            raise cls(str(rejected), global_name) from None
 
+    _dashr_callable.__name__ = global_name
+    _dashr_callable.__qualname__ = global_name
     return _dashr_callable
 
 
-class _DashrReturn(BaseException):
-    # BaseException so a program's own 'except Exception' cannot swallow a
-    # top-level 'return' the way it could swallow an ordinary exception.
-    def __init__(self, value):
-        BaseException.__init__(self)
-        self.value = value
-
-
 class _DashrNoValue:
-    # Distinguishes 'no top-level return executed' (this sentinel) from an
-    # explicit 'return None' (real None) so the host can keep an absent
-    # completion value and an explicit JSON null apart.
+    # Marks 'no completion value': a cell whose last statement is not an
+    # expression, or whose last expression evaluates to None — the REPL
+    # displayhook suppresses None (IPython behavior), so no value crosses.
     __slots__ = ()
 
 
 _DASHR_NO_VALUE = _DashrNoValue()
 
 
-class _DashrReturnRewriter(_dashr_ast.NodeTransformer):
-    # Rewrites program-depth 'return' into the sentinel raise; nested scopes
-    # (functions, lambdas, classes) keep their own return semantics.
+class _DashrTopLevelReturnChecker(_dashr_ast.NodeVisitor):
+    # A cell runs at module scope, like any native IPython cell: a top-level
+    # 'return'/'yield' is a SyntaxError decided by the kernel itself, exactly
+    # as in a real REPL. Nested scopes (functions, lambdas, classes) keep
+    # their own return semantics.
     def visit_FunctionDef(self, node):
-        return node
+        return
 
     def visit_AsyncFunctionDef(self, node):
-        return node
+        return
 
     def visit_ClassDef(self, node):
-        return node
+        return
 
     def visit_Lambda(self, node):
-        return node
+        return
 
     def visit_Return(self, node):
-        value = node.value if node.value is not None else _dashr_ast.Constant(None)
-        return [
-            _dashr_ast.Raise(
-                exc=_dashr_ast.Call(
-                    func=_dashr_ast.Name(id='_DashrReturn', ctx=_dashr_ast.Load()),
-                    args=[value],
-                    keywords=[],
-                )
-            )
-        ]
+        raise SyntaxError("'return' outside function")
 
-
-def _dashr_indent(source):
-    # Indent every physical line for the __dashr_body__ scaffold EXCEPT the
-    # continuation rows of tokens that span lines — only multi-line string
-    # literals qualify, and their interior rows must keep their exact bytes or
-    # the literal's content silently changes. Prefixing any other physical row
-    # only adds whitespace between tokens (statement heads, bracketed or
-    # backslash continuations), which Python ignores.
-    import io as _dashr_io
-    import tokenize as _dashr_tokenize
-    no_indent = set()
-    try:
-        for token in _dashr_tokenize.generate_tokens(_dashr_io.StringIO(source).readline):
-            if token.end[0] > token.start[0]:
-                no_indent.update(range(token.start[0] + 1, token.end[0] + 1))
-    except Exception:
-        # Unparseable program: fall back to the plain indent; the parse below
-        # reports the SyntaxError either way.
-        no_indent.clear()
-    return ''.join(
-        ('' if row in no_indent else '    ') + line + '\\n'
-        for row, line in enumerate(source.splitlines(), start=1)
-    )
+    def visit_Yield(self, node):
+        raise SyntaxError("'yield' outside function")
 
 
 async def _dashr_run_program(source):
-    # Run one program with the user namespace as BOTH globals and locals —
-    # REPL semantics, so 'count = count + ...' reads state left by earlier
-    # runs even though this program assigns the same name (a real function
-    # body would make it an unbound local). Compiled with top-level await
-    # allowed, exec hands back a coroutine when the program awaits.
+    # Run one cell with the user namespace as BOTH globals and locals —
+    # module-scope REPL semantics: state persists across cells, top-level
+    # 'await' is legal (PyCF_ALLOW_TOP_LEVEL_AWAIT, the same mechanism IPython
+    # uses), a top-level 'return'/'yield' is a SyntaxError decided here by the
+    # kernel — exactly as in a native IPython cell — and the last expression's
+    # value is the cell's result (the REPL displayhook handoff).
     import inspect as _dashr_inspect
     user_ns = globals()
     if not source.strip():
         source = 'pass'
-    parsed = _dashr_ast.parse('async def __dashr_body__():' + chr(10) + _dashr_indent(source))
-    rewriter = _DashrReturnRewriter()
-    body = []
-    for statement in parsed.body[0].body:
-        rewritten = rewriter.visit(statement)
-        body.extend(rewritten if isinstance(rewritten, list) else [rewritten])
-    if not body:
-        body = [_dashr_ast.Pass()]
-    module = _dashr_ast.Module(body=body, type_ignores=[])
-    _dashr_ast.fix_missing_locations(module)
+    parsed = _dashr_ast.parse(source, '<dashr program>', 'exec')
+    _DashrTopLevelReturnChecker().visit(parsed)
+    body = parsed.body
+    if body and isinstance(body[-1], _dashr_ast.Expr):
+        # Capture the last expression the way a REPL's displayhook shows it:
+        # its value feeds the completion envelope instead of being discarded.
+        # The name is distinct from the scaffold's __dashr_completion__ (the
+        # envelope holder) so a statement-ending cell can never pop a stale
+        # envelope left by an earlier run.
+        last = body[-1]
+        body[-1] = _dashr_ast.Assign(
+            targets=[_dashr_ast.Name(id='__dashr_cell_value__', ctx=_dashr_ast.Store())],
+            value=last.value,
+        )
+        _dashr_ast.fix_missing_locations(body[-1])
     code = compile(
-        module,
+        parsed,
         '<dashr program>',
         'exec',
         flags=_dashr_ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
     )
-    # The rewriter already unwrapped the 'async def' — module body IS the
-    # program's statements, REPL semantics via user_ns as globals AND locals.
     # IPython's own run_code pattern: with PyCF_ALLOW_TOP_LEVEL_AWAIT, plain
     # exec() DISCARDS the module coroutine silently; eval() under await
     # returns it and runs the code (IPython InteractiveShell.run_code does
     # exactly 'await eval(code_obj, user_global_ns, user_ns)').
-    try:
-        result = eval(code, user_ns, user_ns)
-        if _dashr_inspect.iscoroutine(result):
-            await result
-    except _DashrReturn as returned:
-        return returned.value
-    return _DASHR_NO_VALUE
+    result = eval(code, user_ns, user_ns)
+    if _dashr_inspect.iscoroutine(result):
+        await result
+    value = user_ns.pop('__dashr_cell_value__', _DASHR_NO_VALUE)
+    if value is None:
+        return _DASHR_NO_VALUE
+    return value
 
 
 def _dashr_install_bindings(spec_json):
@@ -322,6 +301,11 @@ def _dashr_install_bindings(spec_json):
             if old_spec.get('errorClass'):
                 user_ns.pop(old_spec['errorClass']['name'], None)
     fresh = {}
+    # The flat per-tool shape declares the SAME error class on many
+    # namespaces: materialize each DISTINCT name once, so every proxy's
+    # raise-time globals() lookup finds ONE class and a single
+    # 'except ToolCallError' catches failures from every binding.
+    error_classes = {}
     for global_name, namespace in spec.items():
         error_class = namespace.get('errorClass')
         if namespace.get('callable'):
@@ -340,11 +324,13 @@ def _dashr_install_bindings(spec_json):
                 error_class['name'] if error_class else None,
                 error_class['memberNameProperty'] if error_class else None,
             )
-        if error_class:
-            user_ns[error_class['name']] = _dashr_make_error_class(
+        if error_class and error_class['name'] not in error_classes:
+            cls = _dashr_make_error_class(
                 error_class['name'],
                 error_class['memberNameProperty'],
             )
+            error_classes[error_class['name']] = cls
+            user_ns[error_class['name']] = cls
         fresh[global_name] = namespace
     user_ns['__dashr_injected__'] = fresh
 
@@ -355,5 +341,10 @@ def _dashr_encode(value):
     try:
         return {'ok': True, 'json': _dashr_json.dumps(value, allow_nan=False)}
     except (TypeError, ValueError, OverflowError):
-        return {'ok': False}
+        # Not lossless JSON: pass its repr TEXT through instead of failing
+        # the cell. The upstream renders the tool result as text either way,
+        # so a non-JSON value costs the model nothing; the host keeps a
+        # plain string it forwards untouched. The envelope itself never
+        # fails, so the completion never gate-rejects a return value.
+        return {'ok': True, 'json': _dashr_json.dumps(repr(value))}
 `

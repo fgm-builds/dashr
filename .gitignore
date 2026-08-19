@@ -29,3 +29,7 @@ lib/
 # --- OS / editor ---
 .DS_Store
 Thumbs.db
+
+# --- local agent tooling (keep on disk, never commit) ---
+.agents/
+.pi/

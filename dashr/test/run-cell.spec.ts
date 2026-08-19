@@ -5,7 +5,7 @@ import { runCell, setupKernel } from './helpers.ts'
 /**
  * End-to-end tier over a REAL IPython kernel (no mocks — kernels are local
  * and cheap once booted, per dsh's real-over-mock policy): the full stack —
- * the model-direct `run_cell` call through the registry pipeline, the bridge,
+ * the model-direct `ipython` call through the registry pipeline, the bridge,
  * the kernel-side `tools` binding over the host-request comm channel, and the
  * persistent namespace — is exercised as the agent loop would drive it. Each
  * test boots one kernel; disposal on test finish shuts it down.
@@ -38,13 +38,13 @@ function valueOf(result: { isError: boolean; value?: unknown }): unknown {
   return { ...value, logs: stripWarnings(value.logs) }
 }
 
-describe('run_cell end-to-end on a real kernel', () => {
+describe('ipython end-to-end on a real kernel', () => {
   it('runs a cell: logs and completion value shape the outer result', async () => {
     const { ctx, agent } = await setupKernel()
     const result = await runCell(ctx, [
       'print("log-line-1")',
       'print("log-line-2")',
-      'return {"answer": 42}',
+      '{"answer": 42}',
     ].join('\n'), { agent: agent.agent })
     expect(result.isError).toBe(false)
     expect(result.value).toEqual({ logs: ['log-line-1', 'log-line-2'], result: { answer: 42 } })
@@ -59,17 +59,17 @@ describe('run_cell end-to-end on a real kernel', () => {
     const result = await runCell(ctx, 'nothing = 1', { agent: agent.agent })
     expect(result.isError).toBe(false)
     expect(result.value).toEqual({ logs: [] })
-    expect(result.content).toEqual([{ type: 'text', text: '(run_cell completed with no output)' }])
+    expect(result.content).toEqual([{ type: 'text', text: '(ipython completed with no output)' }])
   })
 
-  it('an explicit return None yields a null completion value', async () => {
+  it('a None final expression yields no completion value (REPL displayhook)', async () => {
     const { ctx, agent } = await setupKernel()
-    const result = await runCell(ctx, 'return None', { agent: agent.agent })
+    const result = await runCell(ctx, 'None', { agent: agent.agent })
     expect(result.isError).toBe(false)
-    expect(result.value).toEqual({ logs: [], result: null })
+    expect(result.value).toEqual({ logs: [] })
   })
 
-  it('is stateful through the whole stack: a variable survives between two run_cell calls', async () => {
+  it('is stateful through the whole stack: a variable survives between two ipython calls', async () => {
     const { ctx, agent } = await setupKernel()
     const calls: unknown[] = []
     ctx.tools.register(defineTool({
@@ -87,15 +87,15 @@ describe('run_cell end-to-end on a real kernel', () => {
     }))
     // Cell one: call the tool and KEEP its answer in the kernel namespace.
     const first = await runCell(ctx, [
-      'answer = await tools.remember({"value": "first"})',
-      'return answer',
+      'answer = await remember({"value": "first"})',
+      'answer',
     ].join('\n'), { agent: agent.agent })
     expect(first.isError).toBe(false)
     expect(valueOf(first)).toEqual({ logs: [], result: 'recorded#1:first' })
     // Cell two (a SEPARATE tool execution): the variable is still there.
     const second = await runCell(ctx, [
       'print(answer)',
-      'return answer + "|second"',
+      'answer + "|second"',
     ].join('\n'), { agent: agent.agent })
     expect(second.isError).toBe(false)
     expect(valueOf(second)).toEqual({ logs: ['recorded#1:first'], result: 'recorded#1:first|second' })
@@ -115,11 +115,11 @@ describe('run_cell end-to-end on a real kernel', () => {
     }))
     const result = await runCell(ctx, [
       'try:',
-      '    await tools.boom({})',
+      '    await boom({})',
       '    outcome = {"caught": "none"}',
       'except ToolCallError as e:',
       '    outcome = {"caught": e.toolName, "message": str(e)}',
-      'return outcome',
+      'outcome',
     ].join('\n'), { agent: agent.agent })
     expect(result.isError).toBe(false)
     expect(valueOf(result)).toEqual({ logs: [], result: { caught: 'boom', message: 'the tool exploded' } })
@@ -137,7 +137,7 @@ describe('run_cell end-to-end on a real kernel', () => {
       },
       execute(): Promise<never> { return Promise.reject(new Error('the tool exploded')) },
     }))
-    const result = await runCell(ctx, 'await tools.boom({})', { agent: agent.agent })
+    const result = await runCell(ctx, 'await boom({})', { agent: agent.agent })
     expect(result.isError).toBe(true)
     if (!result.isError) throw new Error('expected failure')
     expect(result.error.info).toMatchObject({ name: 'DASHRRunFailedError', code: 'CODE_RUN_FAILED' })
@@ -173,9 +173,9 @@ describe('run_cell end-to-end on a real kernel', () => {
     const result = await runCell(ctx, [
       'import asyncio',
       'values = await asyncio.gather(*[',
-      '    tools.slow_read({"id": tag}) for tag in ("a", "b", "c")',
+      '    slow_read({"id": tag}) for tag in ("a", "b", "c")',
       '])',
-      'return ",".join(values)',
+      '",".join(values)',
     ].join('\n'), { agent: agent.agent })
     expect(result.isError).toBe(false)
     expect(valueOf(result)).toEqual({ logs: [], result: 'read:a,read:b,read:c' })
@@ -199,7 +199,7 @@ describe('run_cell end-to-end on a real kernel', () => {
     expect(result.error.info).toMatchObject({ name: 'DASHRRunFailedError', code: 'CODE_RUN_FAILED' })
     expect((result.content[0] as { text: string }).text).toContain('code run failed (abort)')
     // …and the kernel stays usable afterwards.
-    const after = await runCell(ctx, 'return "still-alive"', { agent: agent.agent })
+    const after = await runCell(ctx, '"still-alive"', { agent: agent.agent })
     expect(after.isError).toBe(false)
     expect(after.value).toEqual({ logs: [], result: 'still-alive' })
   })
@@ -217,9 +217,9 @@ describe('run_cell end-to-end on a real kernel', () => {
       execute: args => Promise.resolve(`echo:${String((args as { value: string }).value)}`),
     }))
     const result = await runCell(ctx, [
-      'first = await tools.echo({"value": "one"})',
-      'second = await tools.echo({"value": "two"})',
-      'return second',
+      'first = await echo({"value": "one"})',
+      'second = await echo({"value": "two"})',
+      'second',
     ].join('\n'), { agent: agent.agent })
     expect(result.isError).toBe(false)
     expect(valueOf(result)).toEqual({ logs: [], result: 'echo:two' })

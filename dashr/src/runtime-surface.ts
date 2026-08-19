@@ -10,7 +10,7 @@
  * `ctx.rlmRuntime` implementation would expose. Structural typing is what
  * the Cordis service boundary is built on (contexts resolve implementations
  * by key, not by class identity), so depending on the shape — not on our own
- * `IPythonCodeRuntime` class — keeps the presentation implementation-agnostic.
+ * `DashrRuntime` class — keeps the presentation implementation-agnostic.
  *
  * Drift control: `test/compat.spec.ts` statically asserts this surface is
  * exactly compatible with the vendored types — a contract change there
@@ -43,7 +43,7 @@ export interface RlmBindingNamespace {
    * object whose members are callable. When true, `functions` must contain
    * EXACTLY ONE entry — the single host function the bare global call
    * dispatches. Mirrors the vendored seam's DASHR-owned `callable` field
-   * (M3-B rlm()/rlm_await() bindings).
+   * (M3-B: the rlm() family and the v0.1.5 flat per-tool bindings).
    */
   callable?: true
   /** Optional program-visible typed rejection contract for this namespace. */

@@ -100,7 +100,7 @@ describe('compact() binding', () => {
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
     runtime.behavior = async (request) => {
       const compact = request.bindings.find(binding => binding.global === 'compact')!
-      const via = await compact.functions['__call__']!({ args: ['context is filling'], kwargs: {} })
+      const via = await compact.functions['__call__']!({ args: [{ reason: 'context is filling' }], kwargs: {} })
       return { logs: [], value: via }
     }
     const result = await cell(ctx, agent.agent, 'program')
@@ -142,7 +142,7 @@ describe('compact() binding', () => {
     })
   })
 
-  it('validates the signature: no args or one reason string, nothing else', async () => {
+  it('validates the signature: no args or one reason key, nothing else', async () => {
     const { ctx, agent } = await setupPresentation(fakeRuntime)
     await registerStubCompaction(ctx, { compactNow: async () => null })
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
@@ -151,13 +151,13 @@ describe('compact() binding', () => {
       const two = await compact.functions['__call__']!({ args: ['a', 'b'], kwargs: {} })
       const kwarg = await compact.functions['__call__']!({ args: [], kwargs: { reason: 'x' } })
       const nonString = await compact.functions['__call__']!({ args: [1], kwargs: {} })
-      const reason = await compact.functions['__call__']!({ args: ['wrapping up'], kwargs: {} })
+      const reason = await compact.functions['__call__']!({ args: [{ reason: 'wrapping up' }], kwargs: {} })
       return { logs: [], value: { two, kwarg, nonString, reason } }
     }
     const result = await cell(ctx, agent.agent, 'program') as Record<string, { error?: string }>
-    expect(result['two']?.error).toContain('compact() expects no arguments')
-    expect(result['kwarg']?.error).toContain('compact() expects no arguments')
-    expect(result['nonString']?.error).toContain('compact() expects no arguments')
+    expect(result['two']?.error).toContain('exactly one positional')
+    expect(result['kwarg']?.error).toContain('not keyword arguments')
+    expect(result['nonString']?.error).toContain('not a bare value')
     expect(result['reason']).toMatchObject({ status: 'no-op' })
   })
 
@@ -222,7 +222,7 @@ describe('compact() design A: the DASHR-scoped engine', () => {
     // A session whose routed request says deepseek/dsv3; 100 tokens of
     // pressure against an 800k threshold: an honest pressure no-op. The
     // agent object itself stays the setup one (its identity is the subject
-    // the scope registry resolves run_cell for); only its session surface is
+    // the scope registry resolves ipython for); only its session surface is
     // enriched with what the real engine reads: the routed request header,
     // the compaction-lock event log, and the busy maintenance gate.
     const session = agent.agent.session as unknown as {

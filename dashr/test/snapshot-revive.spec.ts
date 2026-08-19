@@ -40,7 +40,7 @@ async function waitFor(predicate: () => boolean, budgetMs: number): Promise<bool
   return predicate()
 }
 
-describe('IPythonCodeRuntime — snapshot, restore, revive', () => {
+describe('DashrRuntime — snapshot, restore, revive', () => {
   it('restores the last turn-end snapshot for the same principal on a fresh provider', async () => {
     const snapshotDir = mkdtempSync(join(tmpdir(), 'dashr-snapshot-'))
     snapshotDirs.push(snapshotDir)

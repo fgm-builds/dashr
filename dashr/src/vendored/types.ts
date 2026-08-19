@@ -86,8 +86,9 @@ export interface CodeBindingNamespace {
    * object whose members are callable. When true, `functions` must contain
    * EXACTLY ONE entry — the single host function the bare global call
    * dispatches (its key is a transport detail, not a program-visible member).
-   * DASHR-owned delta (M3-B, blueprint §9): the rlm()/rlm_await() bindings
-   * are bare callable globals, which the object-holder model cannot express.
+   * DASHR-owned delta (M3-B, blueprint §9): the rlm() family and the flat
+   * per-tool bindings are bare callable globals, which the object-holder
+   * model cannot express.
    */
   callable?: true
   /** Optional program-visible typed rejection contract for this namespace. */

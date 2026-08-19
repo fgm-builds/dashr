@@ -1,21 +1,26 @@
 /**
- * DASHR `code-runtime-ipython` provider: a STATEFUL `ctx.rlmRuntime` backend
- * (our vendored Service Definition, blueprint v0.5 §7.6) whose execution
- * substrate is one persistent IPython kernel subprocess per
- * SESSION (the run's `principal`), held in a map inside this one service
- * instance — the upstream "plugins key their state by Session/Agent" model,
- * which the roster's per-mount realm cannot provide on its own (blueprint
- * §7.4.1: an entry-local realm is one instance per MOUNT, and every session
- * joined to a standing mount shares it). Each `run()` is exactly one cell on
- * that session's kernel; variables assigned in run N survive into run N+1
- * (blueprint §1.1 channel ② — state codification, deliberately NOT the
- * per-run isolation the worker-thread backend provides), and two sessions
- * never see each other's variables. Kernels spawn lazily on a key's first
- * run and die with their session (the dsh `agent/disposed` event) or with
- * the plugin. Binding namespaces are materialized kernel-side as callable
- * Python objects whose calls travel back to the host over the `dashr.host`
- * comm target (the PA `host_request()` pattern). This is a capability seam,
- * not a security boundary.
+ * `DashrRuntime`: DASHR's STATEFUL `ctx.rlmRuntime` backend (our vendored
+ * Service Definition, blueprint v0.5 §7.6), the standing-mount layer of the
+ * v0.1.5 architecture — between the profile-level DashrDaemon concept (a v0.1.5
+ * empty shell: named, not yet built) and the session-level ipykernel
+ * subprocess (a pure Python interpreter with no harness awareness). One
+ * instance per standing mount owns a map of one persistent kernel subprocess
+ * per SESSION (the run's `principal`) — the upstream "plugins key their
+ * state by Session/Agent" model, which the roster's per-mount realm cannot
+ * provide on its own (blueprint §7.4.1: an entry-local realm is one instance
+ * per MOUNT, and every session joined to a standing mount shares it) — which
+ * makes DashrRuntime the DE FACTO daemon today: it listens for `agent/disposed`,
+ * keys kernels per session, snapshots them, and dispatches loopback host
+ * requests. Each `run()` is exactly one cell on that session's kernel;
+ * variables assigned in run N survive into run N+1 (blueprint §1.1 channel ②
+ * — state codification, deliberately NOT the per-run isolation the
+ * worker-thread backend provides), and two sessions never see each other's
+ * variables. Kernels spawn lazily on a key's first run and die with their
+ * session (the dsh `agent/disposed` event) or with the plugin. Binding
+ * namespaces are materialized kernel-side as callable Python objects whose
+ * calls travel back to the host over the `dashr.host` comm target (the PA
+ * `host_request()` pattern). This is a capability seam, not a security
+ * boundary.
  *
  * M3-B adds the namespace persistence half: turn-end snapshots (size-capped,
  * blueprint §8.3), restore-on-first-boot, and the death→revive chain (§8.3
@@ -153,12 +158,14 @@ interface SnapshotManifest {
 }
 
 /**
- * The {@link RLMRuntime} backend this package registers (`ctx.rlmRuntime`).
- * One service instance per mount holds one lazily-spawned kernel per session
- * principal; each kernel's lifecycle — snapshot and shutdown on session end,
- * snapshot and shutdown of every key on plugin disposal — is effect-owned.
+ * The {@link RLMRuntime} backend this package registers (`ctx.rlmRuntime`)
+ * — the standing-mount layer of the v0.1.5 architecture, the de facto daemon
+ * while the profile-level DashrDaemon stays an empty shell. One service
+ * instance per mount holds one lazily-spawned kernel per session principal;
+ * each kernel's lifecycle — snapshot and shutdown on session end, snapshot
+ * and shutdown of every key on plugin disposal — is effect-owned.
  */
-export class IPythonCodeRuntime extends RLMRuntime {
+export class DashrRuntime extends RLMRuntime {
   static Config: z<Config> = z.object({
     python: z.string().default('python3'),
     startupTimeoutMs: z.number().default(30_000),
@@ -413,7 +420,12 @@ export class IPythonCodeRuntime extends RLMRuntime {
       bindings.set(namespace.global, namespace)
     }
 
-    const errorClassNames = new Set<string>()
+    // The flat per-tool binding shape (v0.1.5) declares the SAME error class on
+    // every tool namespace: one shared ToolCallError must catch failures from
+    // all of them. An identical (name + member) re-declaration is therefore
+    // legal and materializes once kernel-side; a same-name/different-member
+    // clash stays a contract error.
+    const errorClasses = new Map<string, string>()
     for (const namespace of request.bindings) {
       const descriptor = namespace.errorClass
       if (!descriptor) continue
@@ -423,14 +435,18 @@ export class IPythonCodeRuntime extends RLMRuntime {
       if (RESERVED_BINDING_GLOBALS.has(descriptor.name) || KERNEL_OWNED_NAME.test(descriptor.name)) {
         throw new Error(`dsh-rlm-mode: reserved binding global ${JSON.stringify(descriptor.name)}`)
       }
-      if (bindings.has(descriptor.name) || errorClassNames.has(descriptor.name)) {
+      if (bindings.has(descriptor.name)) {
         throw new Error(`dsh-rlm-mode: duplicate injected global ${JSON.stringify(descriptor.name)}`)
       }
       const member = descriptor.memberNameProperty
       if (member.length === 0 || RESERVED_ERROR_MEMBERS.has(member) || DUNDER_MEMBER.test(member)) {
         throw new Error(`dsh-rlm-mode: binding error member property ${JSON.stringify(descriptor.memberNameProperty)} is not usable`)
       }
-      errorClassNames.add(descriptor.name)
+      const declared = errorClasses.get(descriptor.name)
+      if (declared !== undefined && declared !== member) {
+        throw new Error(`dsh-rlm-mode: error class ${JSON.stringify(descriptor.name)} declared with conflicting member properties ${JSON.stringify(declared)} and ${JSON.stringify(member)}`)
+      }
+      errorClasses.set(descriptor.name, member)
     }
     return bindings
   }
@@ -650,7 +666,7 @@ export class IPythonCodeRuntime extends RLMRuntime {
   }
 }
 
-export default IPythonCodeRuntime
+export default DashrRuntime
 
 /**
  * The vendored Service Definition's public contract, re-exported from the

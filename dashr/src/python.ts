@@ -1,12 +1,12 @@
 /**
  * Per-run cell generation. One `run()` is exactly one `execute_request`: the
  * cell installs the run's binding namespaces, runs the program through
- * `_dashr_run_program` (module-body statements executed with the user
- * namespace as BOTH globals and locals — REPL semantics — under
- * `await eval(...)`, so top-level `await` and `return` work per the seam's
- * function-body contract), and prints the completion envelope under a per-run
- * nonce sentinel so the host can recover the exact JSON bytes from the
- * captured stream.
+ * `_dashr_run_program` (module-scope statements executed with the user
+ * namespace as BOTH globals and locals — pure IPython REPL semantics:
+ * top-level `await` legal, top-level `return` a SyntaxError, and the last
+ * expression's value is the completion), and prints the completion envelope
+ * under a per-run nonce sentinel so the host can recover the exact JSON bytes
+ * from the captured stream.
  *
  * The snapshot and restore cells live here too: they are internal cells on
  * the SAME kernel, generated the same way, and must therefore obey the same
@@ -24,17 +24,18 @@ export type NamespaceSpecs = Record<string, {
 
 /**
  * Build the single cell for one run.
- * @param program - the model's program, the body of an async function.
+ * @param program - the model's cell program, executed at module scope.
  * @param specJson - the JSON-encoded {@link NamespaceSpecs} map.
  * @param sentinel - per-run nonce prefix; the envelope line starts with it.
  * @returns the complete cell source.
  */
 export function buildRunCell(program: string, specJson: string, sentinel: string): string {
   // The program executes via _dashr_run_program (exec with the user
-  // namespace as BOTH globals and locals — REPL semantics, so
+  // namespace as BOTH globals and locals — pure REPL semantics, so
   // 'count = count + ...' reads state left by earlier runs instead of
   // raising UnboundLocalError in a real function scope). Its result is the
-  // rewritten top-level return value.
+  // cell's completion value — the last expression's value, REPL
+  // displayhook-style.
   // The scaffold brackets the whole cell with the SIGALRM busy guard (see the
   // bootstrap's _dashr_state): from the kernel's first bytecode of this cell
   // to its last, an interrupt may raise KeyboardInterrupt — the window where

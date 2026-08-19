@@ -14,12 +14,14 @@
 # (the include row is an EntryGroup) skip loader interpolation.
 #
 # The dashr-kernel group is ONE row: `dsh-rlm-mode`, which mounts the
-# stateful kernel provider (published as `ctx.rlmRuntime`) and the run_cell
-# transport in that order — the model writes one Python program against the
-# generated SDK and one `run_cell` call executes
-# it — every tool in the catalog, including bash, web, skills, goals, and
-# delegation, is reachable from inside the kernel as a
-# `tools.<name>(...)` binding).
+# stateful kernel runtime `DashrRuntime` (published as `ctx.rlmRuntime`)
+# and the ipython transport in that order — the model writes one Python
+# program against the generated SDK and one `ipython` call executes it —
+# every tool in the catalog, including bash, web, skills, goals, and
+# delegation, is reachable from inside the kernel as a flat
+# `await name(args)` function; the delegation tools are bridged under the
+# DASHR names rlm()/agent_message/agent_list/rlm_workflow/rlm_ralph —
+# masked from the catalog, dispatched through the tool layer).
 #
 # Unlike `code` (PTC), whose each run is an isolated fresh worker, `dashr`
 # owns its runtime: every run is one cell on one persistent kernel —
@@ -28,6 +30,13 @@
 # inside its (possibly shared) service instance and tears it down on
 # `agent/disposed`, so sessions joined to one roster mount share the provider
 # but never a namespace (see the package README, "Realm semantics").
+#
+# v0.1.5 layering (plan §2): `DashrRuntime` lives at the standing-mount layer
+# — this preset's mount — and is the de facto daemon: the cross-session
+# kernel map, the `agent/disposed` listening, and the snapshot lifecycle all
+# live in it. The profile-level `DashrDaemon` concept is a v0.1.5 empty shell
+# (cordis.patch.yml stays `[]`); the session layer is each ipykernel
+# subprocess, a pure Python interpreter with no harness awareness.
 #
 # The tool REGISTRY itself stays on the host plane — the agent loop's
 # scheduler and the API proxy's presenters are its consumers — so what this
@@ -63,10 +72,53 @@
         config:
           text: >-
             You are a DASHR agent powered by the {{model}} model. Your working directory is {{cwd}}.
-            You have a persistent Python kernel as your primary tool interface: each `run_cell` call
-            executes one Python program on it, and everything you import, define, or assign in one cell
-            stays available in the next. The full tool catalog is callable from inside the kernel as
-            `tools.<name>(...)` bindings. Prefer the kernel for multi-step work.
+
+      # ── Delegation depth (plan Q5/Q17/Q22/Q23) ─────────────────────────
+      # Patch config REPLACES the target row's config wholesale, so both
+      # delegation rows restate their FULL standard-preset config (provider,
+      # toolName, backgroundMode — keeping `continuable`, which the A2A
+      # uplink and send_message depend on) and add `maxDepth: 10`: default
+      # AND cap, a deployment-level budget the model can never pass as a
+      # call parameter.
+      #
+      # IMPLEMENTATION CHECKPOINT (verified against cordis-plugin-loader
+      # 1.0.2): include-patch config values DO support `!!js` — patch config
+      # lands on the TARGET entries (ordinary plugins), whose config IS
+      # interpolated; only the include ROW's own config skips it (the Include
+      # row itself is the EntryGroup). We still HARDCODE maxDepth at 10 as a
+      # deliberate conservative choice (byte-identical restatement, no extra
+      # env surface to drift); THIS comment marks THE config point to edit
+      # for recursion depth.
+      #
+      # DRIFT RISK (plan risk #2, accepted): upstream changing these rows'
+      # config silently diverges from the restatement above — re-check these
+      # two patches against the standard preset on every upstream upgrade.
+      - id: tool-subagent
+        config:
+          provider: spawn
+          toolName: subagent
+          backgroundMode: continuable
+          maxDepth: 10
+      - id: tool-subagent-fork
+        config:
+          provider: fork
+          toolName: subagent_fork
+          backgroundMode: continuable
+          maxDepth: 10
+      # Child model selection (plan Q24): per-call `model=` is gone (the
+      # bridge dispatches the tool layer, whose schema has no model
+      # parameter — ADR-0001), so a non-inheriting child model is this same
+      # deployment-level patch via agentOptions.model. Uncomment BOTH the
+      # key and the example value below, restating the full row config as
+      # above (patch config is replaced, not merged):
+      # - id: tool-subagent
+      #   config:
+      #     provider: spawn
+      #     toolName: subagent
+      #     backgroundMode: continuable
+      #     maxDepth: 10
+      #     agentOptions:
+      #       model: provider/model-id
 
 - id: dashr-kernel
   name: cordis:group

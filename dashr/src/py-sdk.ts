@@ -1,15 +1,16 @@
 /**
- * DASHR Code Mode codegen — Python flavor, cell edition.
+ * DASHR kernel SDK codegen — Python flavor, cell edition.
  *
  * The pure projection from one calling scope's visible tool schemas to the
- * Python SDK text the model programs against inside `run_cell` cells. Ported
- * from `@deepseek-ai/dsh-tools` `py-types.ts` (0.1.0-rc.6) per blueprint
- * §7.4, deliberately slimmed to DASHR's single-language, stateful surface:
+ * Python SDK text the model programs against inside `ipython` cells. The
+ * type-rendering machinery is ported from `@deepseek-ai/dsh-tools`
+ * `py-types.ts` (0.1.0-rc.6) per blueprint §7.4, deliberately slimmed to
+ * DASHR's single-language, stateful surface:
  *
  * - The usage instructions are OURS, not upstream's: upstream promises a
  *   one-shot program ("runs as the body of an async function", value-less
  *   between calls), while a DASHR cell runs on a PERSISTENT kernel whose
- *   variables, imports, and definitions survive across `run_cell` calls.
+ *   variables, imports, and definitions survive across `ipython` calls.
  *   The prose here must never state the throwaway contract.
  * - No language table and no context-free renderer: DASHR renders Python
  *   only, and object shapes always render through the named-`TypedDict`
@@ -22,20 +23,27 @@
  *   escapes, bracket-nesting cap) exist because the emitted block is the
  *   model's ONLY declaration of the tools, and a syntax error in it poisons
  *   the whole mode.
+ * - v0.1.5 renders the FLAT shape (plan Q8): one top-level
+ *   `async def <name>(args) -> Output` per tool — no `Tools` protocol and
+ *   no `tools` singleton — matching the kernel's flat per-tool binding
+ *   namespaces. Which names may render as functions is decided by
+ *   {@link isFlatBindableName}, the one policy the renderer and the bridge
+ *   share.
  * @module dsh-rlm-mode/py-sdk
  */
 
 import { assertSupportedJsonSchema } from '@deepseek-ai/dsh-tools'
 import type { JsonSchemaNode, JsonSchemaScalar } from '@deepseek-ai/dsh-tools'
+import { PORTABLE_RESERVED_WORDS, RESERVED_BINDING_GLOBALS } from './vendored/rlm-runtime.ts'
 
 /**
  * One tool as the SDK renderer sees it: the model-facing schema
  * (name/description/parameters) plus the tool's canonical output schema.
- * The caller (the presentation plugin) excludes `run_cell` itself and reads
+ * The caller (the presentation plugin) excludes `ipython` itself and reads
  * both through the tool registry's public projection APIs.
  */
 export interface DASHRSdkSchema {
-  /** Tool name as registered (may be exotic; the renderer routes those to subscript comments). */
+  /** Tool name as registered (may be exotic; the renderer routes non-bindable names to not-callable comments). */
   readonly name: string
   /** Tool description, rendered as the method docstring. */
   readonly description: string
@@ -79,13 +87,14 @@ function isBareIdentifier(name: string): boolean {
 
 /**
  * Python hard keywords: reserved everywhere, so a tool or field named
- * `class` or `lambda` is legal on the wire but not as an attribute
- * (`tools.class` would be a `SyntaxError`) and not as a class-syntax
- * `TypedDict` field. Such tools render under subscript access and such
- * objects degrade to `dict[str, Any]`. Soft keywords (`match`, `case`,
- * `type`, `_`) are deliberately absent (each is special in exactly one
- * syntactic position); `__debug__` joins as a compile-time assignment
- * refusal. Ported verbatim from upstream.
+ * `class` or `lambda` is legal on the wire but not as a def name and not
+ * as a class-syntax `TypedDict` field. Such FIELDS make the enclosing
+ * object degrade to `dict[str, Any]`; tool NAME reserving additionally
+ * follows the portable seam set (see {@link isFlatBindableName}), which is
+ * narrower than Python alone. Soft keywords (`match`, `case`, `type`,
+ * `_`) are deliberately absent from this FIELD set (each is special in
+ * exactly one syntactic position); `__debug__` joins as a compile-time
+ * assignment refusal. Ported near-verbatim from upstream.
  */
 const RESERVED = new Set([
   'False', 'None', 'True', 'and', 'as', 'assert', 'async', 'await', 'break', 'class',
@@ -95,8 +104,11 @@ const RESERVED = new Set([
   '__debug__',
 ])
 
+/** The language-portable identifier subset the seam accepts as a binding global (mirrors the runtime's private rule). */
+const PORTABLE_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/
+
 /** `typing` symbols this module may emit, in the deterministic import order. */
-const TYPING_ORDER = ['Any', 'Literal', 'NotRequired', 'Protocol', 'TypedDict'] as const
+const TYPING_ORDER = ['Any', 'Literal', 'NotRequired', 'TypedDict'] as const
 
 /** `indent`-deep line prefix (four spaces per level, PEP 8). */
 function pad(indent: number): string {
@@ -419,79 +431,110 @@ function renderType(schema: unknown, className: string, state: RenderState): str
 }
 
 /**
+ * Whether a tool name can be emitted AND bound as a flat top-level Python
+ * global — the ONE policy shared by this renderer and the bridge's binding
+ * loop (src/index.ts), so the catalog never promises a name the kernel does
+ * not bind. Strictly narrower than the runtime's validation: the
+ * language-portable identifier subset (`[A-Za-z_][A-Za-z0-9_]*`, ASCII — a
+ * non-ASCII XID name is legal CPython but not portable, so the runtime
+ * refuses it as a binding global and the catalog must not teach it), minus
+ * every portable reserved word (ECMAScript ∪ Python — `type` and `match`
+ * are legal Python but reserved on the seam), minus the seam's reserved
+ * binding globals (`console`, dunders), minus underscore-leading names
+ * (kernel-shim prefix plus the call-site hazards; not callable as taught
+ * flat globals). The runtime's `validateBindings` remains the authoritative
+ * backstop: everything this accepts, it accepts.
+ */
+export function isFlatBindableName(name: string): boolean {
+  return PORTABLE_IDENTIFIER.test(name)
+    && !name.startsWith('_')
+    && !PORTABLE_RESERVED_WORDS.has(name)
+    && !RESERVED_BINDING_GLOBALS.has(name)
+}
+
+/**
  * The fixed model-facing usage contract rendered above the declarations —
  * DASHR's OWN text (do not copy upstream `py-types.ts` SDK_INSTRUCTIONS: it
  * promises one-shot program semantics, and our kernel is persistent).
  *
- * Every statement here must match what the `run_cell` transport actually
+ * Every statement here must match what the `ipython` transport actually
  * enforces: cell semantics (variables survive across calls), top-level
  * `await`/`return`, the completion-value contract (lossless JSON; explicit
- * `return None` → null; no `return` → no value), the `tools`/`ToolCallError`
- * runtime binding set, the static-stub caveat for `TypedDict`s, and the
- * sub-call concurrency contract implemented by the transport's scheduler
- * (submission-ordered starts; only concurrency-safe tools overlap, up to the
- * configured cap; exclusive tools run alone as barriers).
+ * `return None` → null; no `return` → no value), the flat binding set
+ * (every tool function below plus `ToolCallError` — registry tools and
+ * bridge tools alike are one flat surface), the static-stub caveat
+ * for `TypedDict`s, and the sub-call concurrency contract implemented by
+ * the transport's scheduler (submission-ordered starts; only
+ * concurrency-safe tools overlap, up to the configured cap; exclusive
+ * tools run alone as barriers).
  */
-const SDK_INSTRUCTIONS = `## Writing cells for run_cell
+const SDK_INSTRUCTIONS = `## Writing cells for ipython
 
-\`run_cell\` takes two required arguments: \`code\` — one Python cell — and \`description\`, a short summary of what the cell does. The cell runs on a PERSISTENT IPython kernel: variables, imports, and definitions created in any earlier \`run_cell\` call of this session are still alive in later ones (and in this one), so treat the kernel's namespace as your working memory. Top-level \`await\` and \`return\` both work. At run time exactly two of the names declared below are bound: \`tools\` and \`ToolCallError\`. Everything else is a STATIC STUB describing argument and return types — in particular the \`TypedDict\` classes do NOT exist at run time, so build arguments as plain \`dict\`/\`list\` JSON values: \`await tools.name({"field": 1})\`, never \`FooArgs(field=1)\`, which raises \`NameError\`. Inside a cell:
+\`ipython\` takes two required arguments: \`cell\` — the Python program — and \`description\`, a short summary of what the cell does. The cell runs on a PERSISTENT IPython kernel: variables, imports, and definitions created in any earlier \`ipython\` call of this session are still alive in later ones (and in this one), so treat the kernel's namespace as your working memory. Top-level \`await\` works; a top-level \`return\` is a SyntaxError — the cell is module scope, exactly like a native IPython cell. At run time the bound names are \`ToolCallError\` and every tool function declared below. Everything else here is a STATIC STUB describing argument and return types — in particular the \`TypedDict\` classes do NOT exist at run time, so build arguments as plain \`dict\`/\`list\` JSON values: \`await echo({"field": 1})\`, never \`EchoArgs(field=1)\`, which raises \`NameError\`. Inside a cell:
 
-- Call tools as \`await tools.name(args)\` — subscript access for exotic, reserved, or underscore-leading names: \`await tools["my-tool"](args)\`. Every call resolves to the tool's typed canonical JSON value (each method's return type below). Tool arguments must be lossless JSON.
+- Call tools as \`await name(args)\` — the plain top-level functions declared below. Every call resolves to the tool's typed canonical JSON value (each function's return type below). Tool arguments must be lossless JSON.
 - A FAILED tool call raises \`ToolCallError\`, whose \`toolName\` identifies the failed tool and whose message is human-readable — wrap in \`try\`/\`except\` to handle and continue.
 - Independent calls may overlap under \`asyncio.gather\`: cells dispatch sub-calls in submission order, and only tools marked safe to run side by side actually overlap (bounded by a cap); any other tool runs alone, waiting for overlapping calls to drain first. Sequence dependent work with plain \`await\`.
-- Emit the answer with \`print(...)\` and/or a top-level \`return <value>\`. The returned value must be lossless JSON: an explicit \`return None\` yields \`null\`, and a cell without \`return\` yields no value at all. ONLY what you print and the returned value come back — intermediate tool results never enter the conversation, so extract just what you need.
+- Emit the answer with \`print(...)\`, or end the cell with a bare expression — its value becomes the cell's result, like a REPL. A value should be JSON-serializable — anything that isn't comes back as its repr text. A cell ending in a statement (or a \`None\` expression) yields no value. ONLY what you print and the final value come back — intermediate tool results never enter the conversation, so extract just what you need.
 
 The available tools:`
 
 /**
- * Render the full `tools:dashr-sdk` prompt section: the cell-flavored
- * usage instructions above, one named `TypedDict` per tool argument or
- * output object (and per nested object), one awaitable method per visible
- * tool on a `Tools` protocol, the `ToolCallError` declaration, and the
- * `tools: Tools` singleton — inside one fenced ```python block. The
- * `typing` import line lists exactly the symbols the render used.
+ * Render the `dashr:tool-catalog` prompt section body from the registry
+ * schemas: the cell-flavored usage instructions above, the
+ * `ToolCallError` declaration, one named `TypedDict` per tool argument or
+ * output object (and per nested object), and one top-level
+ * `async def <name>(args: XArgs) -> XOutput` per visible tool — the FLAT
+ * v0.1.5 shape: no `Tools` protocol, no `tools` singleton, every tool is its
+ * own bare global exactly as the kernel binds it — inside one fenced
+ * ```python block. The `typing` import line lists exactly the symbols the
+ * render used (and is omitted entirely when none are).
  *
  * Deterministic — tools are emitted in lexicographic name order and class
- * declarations precede the protocol in that same order (nested classes
- * before the parent that references them), so an unchanged tool set
- * produces byte-identical text across assemblies.
- * @param schemas - the calling scope's visible tools (caller excludes `run_cell`).
- * @returns the complete section text.
+ * declarations precede the function that references them in that same
+ * order (nested classes before the parent that references them), so an
+ * unchanged tool set produces byte-identical text across assemblies.
+ *
+ * Non-bindable names (reserved, exotic, or underscore-leading) render as
+ * comment lines: they are registered upstream but NOT callable from cells,
+ * and the comment keeps the signature and description visible instead of
+ * silently dropping the tool.
+ * @param schemas - the calling scope's visible tools (caller excludes
+ *   `ipython` and the masked delegation names, and applies the
+ *   `glob` → `file_glob` rename).
+ * @returns the complete section body.
  */
 export function renderToolsSdkPy(schemas: readonly DASHRSdkSchema[]): string {
   const sorted = [...schemas].sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
-  const state: RenderState = { classes: [], usedClassNames: new Set(), nextClassCounter: new Map(), typing: new Set(['Protocol']) }
-  const members: string[] = []
-  let statements = 0
+  const state: RenderState = { classes: [], usedClassNames: new Set(), nextClassCounter: new Map(), typing: new Set() }
+  const defs: string[] = []
   for (const schema of sorted) {
     const argType = renderType(schema.parameters, `${camelCase(schema.name)}Args`, state)
     const outputType = renderType(schema.output, `${camelCase(schema.name)}Output`, state)
-    if (isBareIdentifier(schema.name) && !RESERVED.has(schema.name) && !schema.name.startsWith('_')) {
-      // The docstring must be the method's FIRST statement to document it;
-      // a description-less method takes the `...` stub body.
-      const doc = docLines(schema.description, 2)
-      members.push(`${pad(1)}async def ${schema.name}(self, args: ${argType}) -> ${outputType}:`)
-      members.push(...(doc.length > 0 ? doc : [`${pad(2)}...`]))
-      statements += 1
+    if (isFlatBindableName(schema.name)) {
+      const lines: string[] = []
+      if (schema.name === 'file_glob') {
+        lines.push('# Bound as `file_glob` rather than `glob` because a bare `glob` global would shadow the stdlib `glob` module in this namespace.')
+      }
+      lines.push(`async def ${schema.name}(args: ${argType}) -> ${outputType}:`)
+      // The docstring must be the function's FIRST statement to document it;
+      // a description-less function takes the `...` stub body.
+      const doc = docLines(schema.description, 1)
+      lines.push(...(doc.length > 0 ? doc : ['    ...']))
+      defs.push(lines.join('\n'))
     } else {
-      // Not reachable as `tools.name` — the model calls it as
-      // `tools[name]`. Hard keywords and exotic names are not legal
-      // attributes; underscore-leading names are legal but broken in three
-      // separate ways at the call site (mangling, object-dunder shadowing,
-      // implicit special-method lookup), so one rule routes the family here.
-      members.push(`${pad(1)}# tools[${JSON.stringify(schema.name)}](args: ${argType}) -> ${outputType}`)
+      // Not bindable as a flat global — the model cannot call it from a
+      // cell at all. Keep the signature and description visible as comments
+      // (information preserved) while stating the fact.
+      defs.push(`# ${JSON.stringify(schema.name)}: registered but NOT callable from cells (its name is not a usable flat global) — (args: ${argType}) -> ${outputType}`)
       const description = describe(schema)
-      if (description !== undefined) members.push(`${pad(1)}#   ${description}`)
+      if (description !== undefined) defs.push(`#   ${description}`)
     }
   }
-  // Subscript entries are COMMENTS, not statements: a class body of only
-  // comments fails to parse, so `pass` is required whenever no method was
-  // emitted.
-  const bodyLines = statements > 0 ? members : [`${pad(1)}pass`, ...members]
-  const body = bodyLines.join('\n')
   const imports = TYPING_ORDER.filter(symbol => state.typing.has(symbol))
+  const importLine = imports.length > 0 ? `from typing import ${imports.join(', ')}\n\n` : ''
   const classBlock = state.classes.length > 0 ? `${state.classes.join('\n\n')}\n\n` : ''
   const errorDeclaration = 'class ToolCallError(Exception):\n    toolName: str'
-  const declaration = `from typing import ${imports.join(', ')}\n\n${errorDeclaration}\n\n${classBlock}class Tools(Protocol):\n${body}\n\ntools: Tools`
+  const declaration = `${importLine}${errorDeclaration}\n\n${classBlock}${defs.join('\n\n')}`
   return `${SDK_INSTRUCTIONS}\n\n\`\`\`python\n${declaration}\n\`\`\``
 }

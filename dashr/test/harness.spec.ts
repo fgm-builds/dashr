@@ -76,7 +76,7 @@ describe('Continual Harness store + section', () => {
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
     runtime.behavior = async (request) => {
       const refine = request.bindings.find(binding => binding.global === 'refine')!
-      const value = await refine.functions['__call__']!({ args: ['note the template syntax'], kwargs: {} })
+      const value = await refine.functions['__call__']!({ args: [{ instruction: 'note the template syntax' }], kwargs: {} })
       return { logs: [], value }
     }
     await cell(ctx, agent.agent, 'program')
@@ -88,7 +88,7 @@ describe('Continual Harness store + section', () => {
     // the SDK section (order 150) precedes the harness section (order 200),
     // and interpolation over the entry's braces does not throw.
     const names = assembly.sections.map(section => section.name)
-    expect(names.indexOf('dashr:harness')).toBeGreaterThan(names.indexOf('tools:dashr-sdk'))
+    expect(names.indexOf('dashr:harness')).toBeGreaterThan(names.indexOf('dashr:tool-catalog'))
     expect(() => renderPrompt(assembly)).not.toThrow()
     expect(HARNESS_SECTION_ORDER).toBe(200)
   })
@@ -104,7 +104,7 @@ describe('refine() binding', () => {
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
     runtime.behavior = async (request) => {
       const refine = request.bindings.find(binding => binding.global === 'refine')!
-      const value = await refine.functions['__call__']!({ args: ['remember the deployment facts'], kwargs: {} })
+      const value = await refine.functions['__call__']!({ args: [{ instruction: 'remember the deployment facts' }], kwargs: {} })
       return { logs: [], value }
     }
     const result = await cell(ctx, agent.agent, 'program') as { result: unknown }
@@ -140,7 +140,7 @@ describe('refine() binding', () => {
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
     runtime.behavior = async (request) => {
       const refine = request.bindings.find(binding => binding.global === 'refine')!
-      const unparseable = await refine.functions['__call__']!({ args: ['x'], kwargs: {} })
+      const unparseable = await refine.functions['__call__']!({ args: [{ instruction: 'x' }], kwargs: {} })
       return { logs: [], value: { unparseable } }
     }
     const first = await cell(ctx, agent.agent, 'program') as { result: { unparseable?: unknown } }
@@ -150,7 +150,7 @@ describe('refine() binding', () => {
     respond.text = '[{"op":"add","kind":"vibe","title":"x","content":"y"}]'
     runtime.behavior = async (request) => {
       const refine = request.bindings.find(binding => binding.global === 'refine')!
-      const rejected = await refine.functions['__call__']!({ args: ['x'], kwargs: {} })
+      const rejected = await refine.functions['__call__']!({ args: [{ instruction: 'x' }], kwargs: {} })
       return { logs: [], value: { rejected } }
     }
     const second = await cell(ctx, agent.agent, 'program') as { result: { rejected?: unknown } }
@@ -164,7 +164,7 @@ describe('refine() binding', () => {
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
     runtime.behavior = async (request) => {
       const refine = request.bindings.find(binding => binding.global === 'refine')!
-      const agentRoute = await refine.functions['__call__']!({ args: ['x'], kwargs: {} })
+      const agentRoute = await refine.functions['__call__']!({ args: [{ instruction: 'x' }], kwargs: {} })
       return { logs: [], value: { agentRoute } }
     }
     await cell(ctx, agent.agent, 'program')
@@ -181,7 +181,7 @@ describe('refine() binding', () => {
     })
     bareRuntime.behavior = async (request) => {
       const refine = request.bindings.find(binding => binding.global === 'refine')!
-      const noRoute = await refine.functions['__call__']!({ args: ['x'], kwargs: {} })
+      const noRoute = await refine.functions['__call__']!({ args: [{ instruction: 'x' }], kwargs: {} })
       return { logs: [], value: { noRoute } }
     }
     const noRouteCell = await cell(bare.ctx, bare.agent.agent, 'program') as { result: { noRoute?: unknown } }
@@ -210,7 +210,7 @@ describe('refine() binding', () => {
     const runtime = ctx.get('rlmRuntime') as FakeCellRuntime
     runtime.behavior = async (request) => {
       const refine = request.bindings.find(binding => binding.global === 'refine')!
-      const pending = refine.functions['__call__']!({ args: ['x'], kwargs: {} })
+      const pending = refine.functions['__call__']!({ args: [{ instruction: 'x' }], kwargs: {} })
       controller.abort()
       await pending
       return { logs: [], value: null }
@@ -247,18 +247,18 @@ describe('refine() binding', () => {
       const refine = request.bindings.find(binding => binding.global === 'refine')!
       const noArgs = await refine.functions['__call__']!({ args: [], kwargs: {} })
       const kwargs = await refine.functions['__call__']!({ args: ['x'], kwargs: { label: 'y' } })
-      const empty = await refine.functions['__call__']!({ args: ['   '], kwargs: {} })
+      const empty = await refine.functions['__call__']!({ args: [{ instruction: '   ' }], kwargs: {} })
       return { logs: [], value: { noArgs, kwargs, empty } }
     }
     const result = await cell(ctx, agent.agent, 'program') as { result: Record<string, { error?: string }> }
-    expect(result.result['noArgs']?.error).toContain('exactly one positional instruction string')
-    expect(result.result['kwargs']?.error).toContain('exactly one positional instruction string')
+    expect(result.result['noArgs']?.error).toContain('requires {"instruction"')
+    expect(result.result['kwargs']?.error).toContain('not keyword arguments')
     expect(result.result['empty']?.error).toContain('non-empty string')
 
     // No ctx.llm mounted: structured unavailability, never a crash.
     runtime.behavior = async (request) => {
       const refine = request.bindings.find(binding => binding.global === 'refine')!
-      const value = await refine.functions['__call__']!({ args: ['x'], kwargs: {} })
+      const value = await refine.functions['__call__']!({ args: [{ instruction: 'x' }], kwargs: {} })
       return { logs: [], value }
     }
     const noLlm = await cell(ctx, agent.agent, 'program') as { result?: { error?: string } }
@@ -276,7 +276,7 @@ describe('harness persistence', () => {
     const runtimeOne = first.ctx.get('rlmRuntime') as FakeCellRuntime
     runtimeOne.behavior = async (request) => {
       const refine = request.bindings.find(binding => binding.global === 'refine')!
-      const value = await refine.functions['__call__']!({ args: ['remember the rebuild step'], kwargs: {} })
+      const value = await refine.functions['__call__']!({ args: [{ instruction: 'remember the rebuild step' }], kwargs: {} })
       return { logs: [], value }
     }
     await cell(first.ctx, first.agent.agent, 'program')
@@ -296,7 +296,7 @@ describe('harness persistence', () => {
     const runtimeOne = first.ctx.get('rlmRuntime') as FakeCellRuntime
     runtimeOne.behavior = async (request) => {
       const refine = request.bindings.find(binding => binding.global === 'refine')!
-      await refine.functions['__call__']!({ args: ['x'], kwargs: {} })
+      await refine.functions['__call__']!({ args: [{ instruction: 'x' }], kwargs: {} })
       return { logs: [], value: null }
     }
     await cell(first.ctx, first.agent.agent, 'program')

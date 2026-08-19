@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import { onTestFinished } from 'vitest'
-import { IPythonCodeRuntime } from '../src/index.ts'
+import { DashrRuntime } from '../src/index.ts'
 import type { Config } from '../src/index.ts'
 
 const venvPython = fileURLToPath(new URL('../.venv-kernel/bin/python', import.meta.url))
@@ -11,10 +11,10 @@ const venvPython = fileURLToPath(new URL('../.venv-kernel/bin/python', import.me
 export const KERNEL_PYTHON = process.env.DASHR_TEST_PYTHON ?? (existsSync(venvPython) ? venvPython : 'python3')
 
 /** Boot a fresh context with the ipython provider mounted, worker-thread test style. */
-export async function setupRuntime(config: Config = {}): Promise<{ fiber: Awaited<ReturnType<Context['plugin']>>, runtime: IPythonCodeRuntime }> {
+export async function setupRuntime(config: Config = {}): Promise<{ fiber: Awaited<ReturnType<Context['plugin']>>, runtime: DashrRuntime }> {
   const ctx = new Context()
-  const fiber = await ctx.plugin(IPythonCodeRuntime, { python: KERNEL_PYTHON, ...config })
-  const runtime = ctx.rlmRuntime as IPythonCodeRuntime
+  const fiber = await ctx.plugin(DashrRuntime, { python: KERNEL_PYTHON, ...config })
+  const runtime = ctx.rlmRuntime as DashrRuntime
   // Dispose even when a spec forgets to: kernel children are not killed with
   // the worker process, so an undisposed fiber leaks an idle ipykernel
   // subprocess forever (208 leaked orphans were found mid-project). Double
@@ -24,7 +24,7 @@ export async function setupRuntime(config: Config = {}): Promise<{ fiber: Awaite
 }
 
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime from '@deepseek-ai/dsh-tools'
+import ToolRuntime, { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import { CallId } from '@deepseek-ai/dsh-llm'
 import { createScope } from '@deepseek-ai/dsh-scope'
@@ -141,7 +141,7 @@ export function fakeAgent(): { agent: Agent; events: { type: string; data: unkno
 
 /**
  * Boot the same composition with the REAL kernel provider (M1's
- * `IPythonCodeRuntime` from `dsh-rlm-mode`). One kernel boots
+ * `DashrRuntime` from `dsh-rlm-mode`). One kernel boots
  * per test; the fiber's registered disposer shuts it down
  * (`onTestFinished`), and the acceptance gate asserts no orphan
  * `ipykernel_launcher` processes remain (blueprint §10.9).
@@ -150,8 +150,8 @@ export async function setupKernel(
   presentationConfig: Config = {},
   kernelConfig: import('../src/runtime.ts').Config = {},
 ): Promise<Harness> {
-  const { IPythonCodeRuntime } = await import('../src/runtime.ts')
-  return setupPresentation(async (ctx) => ctx.plugin(IPythonCodeRuntime, {
+  const { DashrRuntime } = await import('../src/runtime.ts')
+  return setupPresentation(async (ctx) => ctx.plugin(DashrRuntime, {
     python: KERNEL_PYTHON,
     // Shorter budgets keep the suite fast while leaving the abort path
     // measurable.
@@ -160,19 +160,103 @@ export async function setupKernel(
   }), presentationConfig)
 }
 
+/**
+ * One call captured against a fake delegation tool: the registry tool name,
+ * the dispatched arguments, and whether the dispatch carried a parent token
+ * (the nested sub-dispatch marker — the model-direct guard's pass condition).
+ */
+export interface FakeDelegationCall {
+  tool: string
+  args: unknown
+  parented: boolean
+}
+
+/**
+ * Register fake registry tools under the SEVEN tool-layer masked delegation names (the eighth, `report`, is bridged over the service layer), the
+ * way the standard preset registers the real ones (ADR-0002: the bridge
+ * dispatches the registered tool; masking never touches the registry). Each
+ * tool records its calls; `outcomes` overrides a tool's return value and
+ * may throw to simulate a failed dispatch. Defaults mirror the real tools'
+ * continuable shapes so tests can assert passthrough.
+ * @returns the shared call log, in dispatch order.
+ */
+export function registerFakeDelegationTools(
+  ctx: Context,
+  outcomes: Partial<Record<string, (args: unknown) => unknown>> = {},
+): FakeDelegationCall[] {
+  const calls: FakeDelegationCall[] = []
+  const defaults: Record<string, unknown> = {
+    subagent: { kind: 'continuable', subagentId: 'child-1' },
+    subagent_fork: { kind: 'continuable', subagentId: 'fork-1' },
+    send_message: { messageId: 'msg-1' },
+    interrupt_agent: { accepted: true },
+    list_agents: [{ kind: 'child', id: 'child-1', label: 'subagent', status: 'idle' }],
+    workflow: { runId: 'wf-1', agentsStarted: 1, result: null },
+    ralph: { runId: 'ralph-1', agentsStarted: 2, result: 'done' },
+  }
+  for (const [name, defaultOutput] of Object.entries(defaults)) {
+    ctx.tools.register(defineTool({
+      name,
+      description: `Fake delegation tool ${name} (test registry).`,
+      parameters: { placeholder: { type: 'string', description: 'Ignored placeholder.' } },
+      output: {
+        schema: { type: 'json' },
+        render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+      },
+      execute(args, exec) {
+        calls.push({ tool: name, args, parented: exec.parent !== undefined })
+        const outcome = outcomes[name]
+        const output = outcome !== undefined ? outcome(args) : defaultOutput
+        return Promise.resolve(output) as Promise<never>
+      },
+    }))
+  }
+  return calls
+}
+
+/** What the fake `ctx.subagents` service recorded, in call order. */
+export interface FakeReportCall {
+  child: Agent
+  content: { type: string, text?: string }[]
+  delivery: string
+  signal: AbortSignal
+}
+
+/**
+ * Mount a fake root-realm `ctx.subagents` service whose `reportFrom` records
+ * calls and answers a fixed message id (or throws the given error — e.g. a
+ * SubagentError-shaped `{ code: 'UNAUTHORIZED' }` rejection).
+ */
+export async function fakeSubagentsService(
+  ctx: Context,
+  reportFrom: (call: FakeReportCall) => Promise<string> = () => Promise.resolve('mid-1'),
+): Promise<FakeReportCall[]> {
+  const reports: FakeReportCall[] = []
+  const fiber = await ctx.plugin({ name: 'fake-subagents', apply(c) {
+    c.provide('subagents', {
+      reportFrom: (child: Agent, content: FakeReportCall['content'], options: { delivery: string, signal: AbortSignal }) => {
+        reports.push({ child, content, delivery: options.delivery, signal: options.signal })
+        return reportFrom(reports[reports.length - 1]!)
+      },
+    })
+  } })
+  onTestFinished(() => fiber.dispose())
+  return reports
+}
+
 const toolSignal = new AbortController().signal
 
-/** Dispatch a model-direct `run_cell` call through the registry pipeline, as the loop would. */
+/** Dispatch a model-direct `ipython` call through the registry pipeline, as the loop would. */
 export async function runCell(
   ctx: Context,
-  code: string,
+  cell: string,
   extras: { agent?: Agent; signal?: AbortSignal; description?: string } = {},
 ): Promise<ToolExecutionResult> {
   return ctx.tools.execute({
     signal: toolSignal,
     callId: CallId('call-1'),
-    name: 'run_cell',
-    arguments: { code, description: extras.description ?? 'Run the test cell' },
+    name: 'ipython',
+    arguments: { cell, description: extras.description ?? 'Run the test cell' },
     ...extras.agent ? { agent: extras.agent } : {},
     ...extras.signal ? { signal: extras.signal } : {},
   })

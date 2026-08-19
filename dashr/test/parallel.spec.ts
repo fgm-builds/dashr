@@ -16,7 +16,7 @@ function asTuple(value: unknown): unknown[] {
   return value
 }
 
-describe('IPythonCodeRuntime — concurrent runs on one kernel', () => {
+describe('DashrRuntime — concurrent runs on one kernel', () => {
   it('serializes two concurrent runs and attributes each result to its own cell', async () => {
     const { runtime } = await setupRuntime()
     // Warm the kernel first so both timed cells enter executeCell with the
@@ -35,14 +35,14 @@ describe('IPythonCodeRuntime — concurrent runs on one kernel', () => {
         'gate = time.monotonic()',
         'time.sleep(0.8)',
         'slow_marker = "slow-settled"',
-        'return ("slow", gate)',
+        '("slow", gate)',
       ].join('\n'),
       bindings: [],
     })
     const fast = runtime.run({
       program: [
         'import time',
-        'return ("fast", time.monotonic(), slow_marker, gate)',
+        '("fast", time.monotonic(), slow_marker, gate)',
       ].join('\n'),
       bindings: [],
     })

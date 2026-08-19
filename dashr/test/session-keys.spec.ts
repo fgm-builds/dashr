@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, onTestFinished } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { IPythonCodeRuntime } from '../src/index.ts'
+import { DashrRuntime } from '../src/index.ts'
 import { KERNEL_PYTHON, setupRuntime } from './helpers.ts'
 
 /**
@@ -45,7 +45,7 @@ afterEach(() => {
   }
 })
 
-describe('IPythonCodeRuntime — per-session kernel keying', () => {
+describe('DashrRuntime — per-session kernel keying', () => {
   it('isolates namespaces between principals on one shared service instance', async () => {
     const { runtime } = await setupRuntime()
     await runtime.run({ program: 'secret_a = "only-a"', bindings: [], principal: 'sess-a' })
@@ -112,8 +112,8 @@ describe('IPythonCodeRuntime — per-session kernel keying', () => {
 
   it('destroys exactly the disposed session kernel on agent/disposed', async () => {
     const ctx = new Context()
-    const fiber = await ctx.plugin(IPythonCodeRuntime, { python: KERNEL_PYTHON })
-    const runtime = ctx.rlmRuntime as IPythonCodeRuntime
+    const fiber = await ctx.plugin(DashrRuntime, { python: KERNEL_PYTHON })
+    const runtime = ctx.rlmRuntime as DashrRuntime
     try {
       const setupA = await runtime.run({ program: 'a = 1', bindings: [], principal: 'sess-end-a' })
       const setupB = await runtime.run({ program: 'b = 1', bindings: [], principal: 'sess-end-b' })
@@ -180,14 +180,14 @@ describe('IPythonCodeRuntime — per-session kernel keying', () => {
   }, 30_000)
 })
 
-describe('IPythonCodeRuntime — per-session kernel cwd', () => {
+describe('DashrRuntime — per-session kernel cwd', () => {
   it('spawns the kernel in the request cwd (session workspace), never the host process cwd', async () => {
     const ctx = new Context()
     const workspace = mkdtempSync(join(tmpdir(), 'dashr-cwd-'))
     snapshotDirs.push(workspace)
-    const fiber = await ctx.plugin(IPythonCodeRuntime, { python: KERNEL_PYTHON, runTimeoutMs: 30_000 })
+    const fiber = await ctx.plugin(DashrRuntime, { python: KERNEL_PYTHON, runTimeoutMs: 30_000 })
     onTestFinished(() => fiber.dispose())
-    const runtime = ctx.rlmRuntime as IPythonCodeRuntime
+    const runtime = ctx.rlmRuntime as DashrRuntime
 
     // The presentation layer threads `agent.session.header.cwd` down as
     // `request.cwd`; the runtime must spawn the kernel THERE, not inherit

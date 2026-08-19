@@ -19,9 +19,13 @@ curl -fsSL https://raw.githubusercontent.com/fgm-builds/dashr/main/install.sh | 
 ### Alternative: `dsh` Plugin CLI (`npm`)
 
 ```bash
+# pnpm's registry cache can lag a fresh publish — drop it first, then:
+rm -rf ~/.cache/pnpm
 dsh plugin --profile web add --config.auto-install-peers=false dsh-rlm-mode
-# then copy the preset files (install.sh does this for you):
-#   <profile>/node_modules/dsh-rlm-mode/preset/rlm-mode/*  →  ~/.dsh/.agent-presets/rlm-mode/
+# then LOCALIZE the preset files (a plain copy is not enough — the include
+# path and kernel Python must be baked in; install.sh does this for you):
+#   sed the two placeholders in <profile>/node_modules/dsh-rlm-mode/preset/rlm-mode/agent.cordis.yml
+#   into ~/.dsh/.agent-presets/rlm-mode/  (see install.sh step 5/5)
 ```
 
 > After installation, launch `dsh web` and select the **RLM Mode** agent preset.
@@ -60,17 +64,23 @@ Reference: *Recursive Language Models* (MIT/Stanford/Open MIND, 2025, [arXiv:251
 
 ### Architecture
 
+The runtime stack is one three-layer model (v0.1.5 layering):
+
+- **Profile layer (process-wide)** — `DashrDaemon`: the profile-level daemon concept, an empty shell in v0.1.5 (named in the bundle patch, which stays `[]` — no code yet).
+- **Standing-mount layer** — `DashrRuntime`: one instance per standing mount holding the cross-session kernel map. This is the **de facto daemon** today — it listens for session disposal, keys one kernel per session, snapshots namespaces, and dispatches host tool calls back from cells.
+- **Session layer** — the ipykernel subprocess: a pure Python interpreter with no harness awareness; only the TS-side runtime knows about sessions and tools.
+
 #### 1. Context as Variables（上下文即变量，Stateful Kernel）
 In standard agent loops, reading large files or computing complex payloads dumps raw output directly into the conversation history. In Dashr:
 - State and computation persist inside a live IPython kernel session.
 - Intermediate variables survive across cells without re-entering the prompt.
-- **Python Kernel Unified Tool Calling（统一的代码化工具调用）**: Tools are exposed as first-class Python functions (`tools.<name>()`). Intermediate execution data never round-trips through the prompt.
+- **Python Kernel Unified Tool Calling（统一的代码化工具调用）**: Tools are exposed as flat top-level Python callables (`await name({...})` inside a cell). Intermediate execution data never round-trips through the prompt.
 
 #### 2. Recursive Sub-Agents（`rlm()`）
 The core mechanism of **RLM**:
-- For token-heavy or exploratory subtasks, the agent spawns child agents (`handle = rlm("Investigate repository history")`).
+- For token-heavy or exploratory subtasks, the agent spawns child agents (`child = await rlm({"mode": "spawn", "prompt": "Investigate repository history"})`).
 - Sub-agents operate recursively in their own isolated context loops.
-- When finished, `rlm_await(handle)` collects only the final distilled summary back into the parent kernel.
+- When finished, the parent collects only the final distilled summary back into its kernel (the child's `agent_message({"receiver": "parent", ...})` uplink).
 
 #### 3. Global Context Recency Window（全局上下文时效窗口）
 - Even without spawning sub-agents, Dashr maintains a bounded **Global Context Recency Window** over recent turns via sliding-window compression.
@@ -88,7 +98,7 @@ While both **RLM Mode (Dashr)** and `dsh`'s built-in **Code Mode** provide a cod
 
 | Dimension | RLM Mode (Dashr Plugin) | Code Mode (`dsh` Built-in) | Highlight & Advantage |
 |---|---|---|---|
-| **Interface Standardization** | Host Toolset Registry Schema | Host Toolset Registry Schema | 🤝 Both dynamically expose typed SDK bindings (`tools.*`) generated from the same host registry. |
+| **Interface Standardization** | Host Toolset Registry Schema | Host Toolset Registry Schema | 🤝 Both dynamically expose typed SDK bindings generated from the same host registry — flat `await name({...})` in Dashr vs `tools.name({...})` in Code Mode. |
 | **Trigger & Orchestration** | Programmatic Code Execution | Programmatic Code Execution | 🤝 Both collapse multiple sequential tool calls into a single code execution step. |
 | **Execution Language** | **Python** (IPython 3.10+) | TypeScript / JavaScript | 🐍 Full access to Python's data science, AST analysis, and AI tooling ecosystem (`pandas`, `numpy`, etc.). |
 | **Backend & Kernel Layer** | **Persistent IPython Kernel** (ZeroMQ + Jupyter Protocol) | Ephemeral Node.js Sandbox / One-shot runner | ⚡ Dashr maintains a dedicated, persistent kernel per session. Variables, imports, and objects survive across turns. |
@@ -100,7 +110,7 @@ While both **RLM Mode (Dashr)** and `dsh`'s built-in **Code Mode** provide a cod
 ## ✨ Features
 
 - 💬 **A2A Agent Messaging（智能体间直接通信）** — Direct agent-to-agent messaging channels across family trees and siblings with result/message separation.
-- 🔀 **In-Kernel Recursive Sub-Agents** — Call `rlm(task)` to spawn parallel sub-agents and `rlm_await(id)` to collect results inside Python code.
+- 🔀 **In-Kernel Recursive Sub-Agents** — Call `rlm({"mode": "spawn", "prompt": task})` to spawn sub-agents and collect results inside Python code — background by default, or block with `{"run_in_background": false}`.
 - 🪟 **Global Context Recency Window（全局上下文近期窗口）** — Sliding window compression that preserves recent turns while compacting older history.
 - 🧠 **Dynamic Harness & Compaction** — Built-in `refine()` for operating memory and `compact()` for context reduction under pressure.
 - 💾 **State Snapshot & Revival（状态快照与环境复原）** — Save and restore the kernel namespace across sessions.

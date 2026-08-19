@@ -26,7 +26,7 @@ import { setupRuntime } from './helpers.ts'
 /** Fast budgets so the confirm/grace ladder is measurable in wall time. */
 const RACE_CONFIG = { interruptConfirmMs: 120, interruptGraceMs: 1_500 }
 
-describe('IPythonCodeRuntime — interrupt race windows (M3-A)', () => {
+describe('DashrRuntime — interrupt race windows (M3-A)', () => {
   it('survives abort fired on the same tick as run() — 10/10, pid stable', async () => {
     const { runtime } = await setupRuntime(RACE_CONFIG)
     for (let trial = 1; trial <= 10; trial++) {

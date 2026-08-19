@@ -27,7 +27,7 @@ describe('refine() / compact() on a real kernel', () => {
   it('awaits refine(instruction) inside a cell, and the next assembly carries the new entry', async () => {
     const { ctx, agent } = await setupKernel({ refineModel: 'zai/glm-5.2' } satisfies Config)
     await stubLlm(ctx, '[{"op":"add","kind":"memory","title":"Kernel fact","content":"The kernel answers refine() calls."}]')
-    const result = await runCell(ctx, `import json\nres = await refine('remember how the kernel answers')\nprint(json.dumps(res['applied']))\nreturn res`, { agent: agent.agent, description: 'Refine the harness from a real cell' })
+    const result = await runCell(ctx, `import json\nres = await refine({'instruction': 'remember how the kernel answers'})\nprint(json.dumps(res['applied']))\nres`, { agent: agent.agent, description: 'Refine the harness from a real cell' })
     expect(result.isError, JSON.stringify(result.content)).toBe(false)
     const value = result.value as { logs: string[], result?: { refined?: boolean, applied?: unknown[] } }
     expect(value.result?.refined).toBe(true)
@@ -51,7 +51,7 @@ describe('refine() / compact() on a real kernel', () => {
       })
     } })
     onTestFinished(() => fiber.dispose())
-    const result = await runCell(ctx, `res = await compact()\nreturn res`, { agent: agent.agent, description: 'Compact from a real cell' })
+    const result = await runCell(ctx, `res = await compact()\nres`, { agent: agent.agent, description: 'Compact from a real cell' })
     expect(result.isError, JSON.stringify(result.content)).toBe(false)
     const value = result.value as { result?: { status?: string, path?: string } }
     expect(value.result).toMatchObject({ status: 'compacted', path: 'pressure', shadowed_tokens: 50 })

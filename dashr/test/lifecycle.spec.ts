@@ -24,7 +24,7 @@ function isAlive(pid: number | undefined): boolean {
   }
 }
 
-describe('IPythonCodeRuntime — lifecycle as effects', () => {
+describe('DashrRuntime — lifecycle as effects', () => {
   it('disposes the kernel subprocess on fiber dispose (pid goes away)', async () => {
     const { fiber, runtime } = await setupRuntime()
     const result = await runtime.run({ program: 'x = 40 + 2\nprint(x)', bindings: [] })
@@ -44,13 +44,13 @@ describe('IPythonCodeRuntime — lifecycle as effects', () => {
   it('aborts an in-flight run on dispose and rejects later runs', async () => {
     const { fiber, runtime } = await setupRuntime()
     await runtime.run({ program: 'print("warm")', bindings: [] })
-    const inflight = runtime.run({ program: 'import time\ntime.sleep(30)\nreturn 1', bindings: [] })
+    const inflight = runtime.run({ program: 'import time\ntime.sleep(30)', bindings: [] })
     await new Promise(resolve => setTimeout(resolve, 500))
     await fiber.dispose()
     const result = await inflight
     // Dispose settles the run without awaiting a full cell timeout.
     expect(['abort', 'timeout', 'worker-exit']).toContain(result.error?.kind)
-    await expect(runtime.run({ program: 'return 1', bindings: [] })).rejects.toThrow(/after disposal/)
+    await expect(runtime.run({ program: '1', bindings: [] })).rejects.toThrow(/after disposal/)
   }, 30_000)
 
   it('writes a namespace snapshot on dispose when snapshotDir is configured', async () => {
