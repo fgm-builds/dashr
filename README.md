@@ -4,8 +4,8 @@
   <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/plugin%20for-dsh-blueviolet.svg?style=flat-square" alt="dsh plugin" /></a>
   <a href="https://npmjs.com/package/dsh-rlm-mode"><img src="https://img.shields.io/badge/npm-dsh--rlm--mode-CB3837.svg?style=flat-square&logo=npm" alt="npm package" /></a>
   <a href="https://arxiv.org/abs/2512.24601"><img src="https://img.shields.io/badge/arXiv-2512.24601-B31B1B.svg?style=flat-square" alt="arXiv:2512.24601" /></a>
-  <a href="https://github.com/fgm-builds/dashr"><img src="https://img.shields.io/badge/github-fgm--builds%2Fdashr-black.svg?style=flat-square&logo=github" alt="Repository" /></a>
-  <a href="https://github.com/fgm-builds/dashr/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License" /></a>
+  <a href="https://github.com/pgmi-builds/dashr"><img src="https://img.shields.io/badge/github-pgmi--builds%2Fdashr-black.svg?style=flat-square&logo=github" alt="Repository" /></a>
+  <a href="https://github.com/pgmi-builds/dashr/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License" /></a>
 </p>
 
 ---
@@ -13,7 +13,7 @@
 ## ⚡ Quick Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fgm-builds/dashr/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/pgmi-builds/dashr/main/install.sh | bash
 ```
 
 ### Alternative: `dsh` Plugin CLI (`npm`)

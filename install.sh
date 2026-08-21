@@ -10,14 +10,14 @@
 #   DSH_PROFILE     dsh profile to install into            (default: web)
 #   DSH_HOME        dsh harness home                       (default: ~/.dsh)
 #   DASHR_VERSION   repo ref (tag or branch) to fetch      (default: v0.1.0)
-#   DASHR_REPO      repo origin                            (default: github.com/fgm-builds/dashr)
+#   DASHR_REPO      repo origin                            (default: github.com/pgmi-builds/dashr)
 #   DASHR_SRC       existing source dir for the offline fallback  (default: unset)
 set -euo pipefail
 
 DSH_PROFILE="${DSH_PROFILE:-web}"
 DSH_HOME_DIR="${DSH_HOME:-$HOME/.dsh}"
 DASHR_VERSION="${DASHR_VERSION:-main}"
-DASHR_REPO="${DASHR_REPO:-https://github.com/fgm-builds/dashr}"
+DASHR_REPO="${DASHR_REPO:-https://github.com/pgmi-builds/dashr}"
 DASHR_SRC="${DASHR_SRC:-}"
 
 info()  { printf '\033[1;32m[dashr]\033[0m %s\n' "$*"; }

@@ -118,7 +118,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/fgm-builds/dashr.git"
+    "url": "git+https://github.com/pgmi-builds/dashr.git"
   },
   "keywords": [
     "dsh",
